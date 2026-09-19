@@ -10,6 +10,19 @@
  *   2. There is a keyboard axis (arrows / WASD). The basket and the rake are
  *      positional, and a game about a cozy afternoon should not require a
  *      mouse to play.
+ *
+ * The touch pad used to be three real DOM <button>s living in the 551 px of
+ * dead page below a letterboxed 4:3 canvas. Klaudia rejected that build by
+ * name: the game on a tiny screen, buttons eating the rest, and it read as
+ * AI-generated chrome bolted onto a picture. Both problems had the same
+ * root cause - the canvas was NOT the screen, so something else had to be.
+ *
+ * Now it is. The canvas element is sized to the whole viewport; the extra
+ * space beyond the fixed 720x540 scene is real drawn world (EF.bleed, see
+ * utils.js), and the two controls that need a finger - BACK and the primary
+ * ACTION - are painted directly onto that world at a fixed CSS-pixel size
+ * (EF.px) instead of living in the DOM. Nothing overlays the play area:
+ * there is no play area distinct from the canvas any more.
  */
 (function (global) {
   'use strict';
@@ -18,13 +31,10 @@
   var canvas = document.getElementById('game');
   var stage = document.getElementById('stage');
   var app = document.getElementById('app');
-  var pad = document.getElementById('pad');
-  var btnAction = document.getElementById('pad-action');
-  var btnBack = document.getElementById('pad-back');
-  var btnMute = document.getElementById('pad-mute');
   var ctx = canvas.getContext('2d', { alpha: false });
 
   var W = EF.Game.W, H = EF.Game.H;
+  var P = EF.Palette;
 
   /* ?seed=123 replays a day exactly - the orchard, the yard and the grove are
      all seeded from it. Handy when a screenshot or a bug needs to be the same
@@ -55,107 +65,109 @@
 
   var touch = false;
 
-  /* The pad exists in the markup but is display:none until this runs, so a
-     desktop renders byte-for-byte the page that was verified 46/46. */
   function applyMode() {
     touch = isTouch();
     var landscape = (global.innerWidth || 1) > (global.innerHeight || 1);
     document.body.classList.toggle('touch', touch);
     document.body.classList.toggle('landscape', touch && landscape);
     /* The renderer draws its own footer hint and needs to know whether this
-       device has an Esc key - game.js:706 reads EF.touch to choose between
-       'ESC - back to the valley' and 'BACK - to the valley'. Nothing set it
-       before, so a phone was told to press a key it does not have. */
+       device has an Esc key - game.js reads EF.touch to choose between
+       'ESC - back to the valley' and 'BACK - to the valley'. */
     EF.touch = touch;
     return landscape;
   }
 
-  /* ---------------- fit the logical canvas into the stage ------------ */
+  /* ---------------- fit the canvas to the whole viewport -------------- */
 
-  /* How much of the screen the pad is allowed to take. The scene is a fixed
-     720x540 logical space, so on a phone the canvas is already as wide (or as
-     tall) as it can be without cropping the grove out of frame - what was
-     wrong was the 551 px of dead plum left over in portrait, not the canvas.
-     These two fractions turn that leftover into the controls.
-     The ceilings stop a tall phone from rendering three absurd slabs. */
-  var PAD_LANDSCAPE = 0.30, PAD_LANDSCAPE_MAX = 300;
-
-  /* Portrait floor: enough for two rows of 44 px controls plus the gaps and
-     padding CSS puts around them. The pad then takes everything the canvas
-     does not, and CSS centres the buttons inside that - which is why the
-     canvas sits flush under the status bar instead of floating in the middle
-     of the screen with a dead plum band above AND below it. */
-  var PAD_PORTRAIT_MIN = 150;
+  /* How much of the bled world at the bottom (portrait) or side (landscape)
+     the on-canvas pad reserves for itself, in real CSS pixels. Small on
+     purpose: the pad is two buttons, not a console, and every pixel not
+     spent on it is more valley visible on the phone that rejected the old
+     build for showing too little of it. */
+  var FOOTER_CSS = 108;    // portrait: reserved strip along the true bottom
+  var GUTTER_CSS = 128;    // landscape: reserved strip along the true right edge
+  var BTN_MARGIN = 14;
+  var BTN_GAP = 12;
+  var BTN_H = 60;          // > the 44 px WCAG 2.5.5 floor, sized for a thumb
+  var BACK_W = 84;
 
   function fit() {
     var landscape = applyMode();
 
     /* Desktop keeps its original geometry EXACTLY: measure the stage and let
-       flexbox own the layout. Deviating here is how a mobile fix silently
-       reshapes the build that was already signed off. */
+       flexbox own the layout, no bleed, no on-canvas pad. Deviating here is
+       how a mobile fix silently reshapes the build that was already signed
+       off. */
     if (!touch) {
-      pad.style.width = '';
-      pad.style.height = '';
+      EF.bleed = { x: 0, top: 0, bottom: 0 };
+      padGeom = null;
       stage.style.width = '';
       stage.style.height = '';
-      sizeCanvas(stage.getBoundingClientRect().width, stage.getBoundingClientRect().height);
+      var r0 = stage.getBoundingClientRect();
+      /* Contain-fit at the scene's own 720x540 aspect - the canvas is a
+         letterboxed box centred in #stage by #stage's own flex centring,
+         same as it always was. This is the one place that still does that;
+         everywhere else (touch) the canvas is simply the whole viewport. */
+      var f0 = Math.min(Math.max(1, r0.width) / W, Math.max(1, r0.height) / H);
+      sizeCanvas(Math.round(W * f0), Math.round(H * f0));
       return;
     }
 
-    /* On touch, #stage is flex:0 0 auto (CSS) so it no longer eats the line;
-       this function is the only place that knows how the space is split, so
-       it sizes both boxes itself. Measuring #app minus its safe-area padding
-       is what keeps the pad clear of an iOS home indicator. */
+    /* On touch the canvas IS the viewport - #stage simply matches #app's
+       content box, safe-area insets already excluded by the CSS padding on
+       #app, so the pad never lands under a notch or the home indicator. */
     var r = app.getBoundingClientRect();
     var cs = global.getComputedStyle(app);
     var availW = Math.max(1, r.width - num(cs.paddingLeft) - num(cs.paddingRight));
     var availH = Math.max(1, r.height - num(cs.paddingTop) - num(cs.paddingBottom));
 
-    var padW, padH, size;
+    stage.style.width = availW + 'px';
+    stage.style.height = availH + 'px';
+
+    /* Portrait fits the scene's WIDTH to the screen (it already was the
+       screen's width at 4:3) and lets the extra HEIGHT become bled world
+       plus the footer. Landscape fits the scene's HEIGHT and bleeds width
+       left+right instead. Either way the canvas below ends up exactly
+       availW x availH - never less. */
+    var f = landscape ? (availH / H) : (availW / W);
+    f = Math.max(0.01, f);
+    EF.cssPerUnit = f;
+
     if (landscape) {
-      padW = Math.min(Math.round(availW * PAD_LANDSCAPE), PAD_LANDSCAPE_MAX);
-      padH = availH;
-      size = sizeCanvas(availW - padW, availH);
+      var totalLogicalW = availW / f;
+      EF.bleed = { x: Math.max(0, (totalLogicalW - W) / 2), top: 0, bottom: 0 };
     } else {
-      /* Size the canvas against the space left once the pad's FLOOR is
-         reserved, then give the pad whatever the canvas actually left over.
-         In portrait a 4:3 scene is width-limited, so that remainder is large
-         and real - reserving only a fixed slice of it is what left bands of
-         unused plum at both ends of the screen. */
-      size = sizeCanvas(availW, availH - PAD_PORTRAIT_MIN);
-      padW = availW;
-      padH = Math.max(PAD_PORTRAIT_MIN, availH - size.h);
+      var totalLogicalH = availH / f;
+      var footer = Math.min(EF.px(FOOTER_CSS), Math.max(0, totalLogicalH - H));
+      var top = Math.max(0, totalLogicalH - H - footer);
+      EF.bleed = { x: 0, top: top, bottom: footer };
     }
 
-    /* Shrink-wrap the stage onto the canvas so the pad sits against the
-       artwork instead of across a band of leftover plum. */
-    stage.style.width = size.w + 'px';
-    stage.style.height = size.h + 'px';
-    pad.style.width = Math.round(landscape ? padW : Math.max(padW, size.w)) + 'px';
-    pad.style.height = Math.round(padH) + 'px';
+    sizeCanvas(availW, availH);
+    computePad(landscape);
   }
 
   function num(v) { var n = parseFloat(v); return isFinite(n) ? n : 0; }
 
-  function sizeCanvas(availW, availH) {
-    var f = Math.min(Math.max(1, availW) / W, Math.max(1, availH) / H);
-    var cssW = Math.round(W * f);
-    var cssH = Math.round(H * f);
-
+  function sizeCanvas(cssW, cssH) {
     var dpr = Math.min(global.devicePixelRatio || 1, 2);
-    canvas.style.width = cssW + 'px';
-    canvas.style.height = cssH + 'px';
+    canvas.style.width = Math.round(cssW) + 'px';
+    canvas.style.height = Math.round(cssH) + 'px';
     canvas.width = Math.max(1, Math.round(cssW * dpr));
     canvas.height = Math.max(1, Math.round(cssH * dpr));
 
-    ctx.setTransform(canvas.width / W, 0, 0, canvas.height / H, 0, 0);
+    var b = EF.bleed;
+    var totalW = W + b.x * 2, totalH = H + b.top + b.bottom;
+    var sx = canvas.width / totalW, sy = canvas.height / totalH;
+    /* Logical (-bleed.x, -bleed.top) is the top-left of the bled canvas, so
+       that is what has to land on device pixel (0,0) - see EF.fullRect(). */
+    ctx.setTransform(sx, 0, 0, sy, b.x * sx, b.top * sy);
     ctx.imageSmoothingEnabled = true;
-    return { w: cssW, h: cssH };
   }
 
   fit();
   if (coarseMQ) {
-    var onCoarse = function () { fit(); syncPad(); };
+    var onCoarse = function () { fit(); };
     if (coarseMQ.addEventListener) coarseMQ.addEventListener('change', onCoarse);
     else if (coarseMQ.addListener) coarseMQ.addListener(onCoarse);
   }
@@ -167,11 +179,18 @@
 
   /* ---------------- input ------------------------------------------- */
 
+  /* Client pixel -> logical game coordinate, in the SAME space every
+     hand-placed scene coordinate already lives in: (0,0) is still the top
+     of the 720x540 scene even though the canvas now extends above and
+     below it, so nothing in game.js / harvest.js / rake.js / swing.js has
+     to know bleed exists. */
   function toLogical(clientX, clientY) {
     var r = canvas.getBoundingClientRect();
+    var b = EF.bleed;
+    var totalW = W + b.x * 2, totalH = H + b.top + b.bottom;
     return {
-      x: (clientX - r.left) / Math.max(1, r.width) * W,
-      y: (clientY - r.top) / Math.max(1, r.height) * H
+      x: (clientX - r.left) / Math.max(1, r.width) * totalW - b.x,
+      y: (clientY - r.top) / Math.max(1, r.height) * totalH - b.top
     };
   }
 
@@ -194,6 +213,14 @@
     armAudio();
     var c = coords(e);
     var p = toLogical(c.cx, c.cy);
+
+    /* The pad intercepts before the world does - a tap on BACK must never
+       also be read as a tap on whatever signpost happens to sit under it. */
+    if (touch && padGeom) {
+      var hit = hitPad(p.x, p.y);
+      if (hit === 'action') { if (game.canAction()) game.action(); return; }
+      if (hit === 'back')   { if (game.canBack())   game.back();   return; }
+    }
     game.pointerDown(p.x, p.y);
   }
 
@@ -239,66 +266,100 @@
   stage.addEventListener('touchmove', function (e) { if (e.cancelable) e.preventDefault(); }, { passive: false });
   stage.addEventListener('contextmenu', function (e) { e.preventDefault(); });
 
-  /* ---------------- the touch pad ------------------------------------ */
+  /* ---------------- the on-canvas touch pad --------------------------- */
 
-  /* Why these are real <button>s and not more canvas drawing: anything drawn
-     inside the canvas scales with the canvas, so a 44 px control in game
-     units renders about 24 real pixels on a phone - under the documented
-     minimum finger target. The pad lives outside the canvas, in real CSS
-     pixels, which is the only way its size is honest.
+  /* Two buttons, painted straight onto the bled world instead of living in
+     the DOM: a wood plank in the same material as the valley's signposts
+     (js/world.js:W.sign), not a rounded-rectangle-with-gradient app button -
+     that generic shape is a fair part of why the first build "looked
+     AI-generated". Sized through EF.px() so a 60 CSS px button is 60 real
+     pixels on a phone regardless of how the logical scene is scaled.
 
-     Each handler calls exactly the same Game method the keyboard calls, so a
-     phone and a desktop cannot drift into two different games. */
-  function padPress(fn) {
-    return function (e) {
-      e.preventDefault();          // no 300 ms tap delay, no synthesised click
-      e.stopPropagation();
-      armAudio();
-      fn();
-      syncPad();                   // relabel immediately, don't wait a frame
-    };
-  }
+     game.js owns what the buttons SAY and whether pressing them does
+     anything (actionLabel / canAction / canBack) for exactly the reason its
+     own comments give: rendering them here but deciding them there is how a
+     label and a behaviour end up agreeing. */
+  var padGeom = null;
 
-  /* pointerup, not click: on iOS a click on a button inside a
-     touch-action:none ancestor can be swallowed entirely. */
-  function bind(btn, fn) {
-    if (!btn) return;
-    var h = padPress(fn);
-    btn.addEventListener('pointerup', h, { passive: false });
-    btn.addEventListener('click', function (e) { e.preventDefault(); });
-    /* Engines with no PointerEvent (older WebViews) still need a way in. */
-    if (!global.PointerEvent) btn.addEventListener('touchend', h, { passive: false });
-  }
+  function computePad(landscape) {
+    var b = EF.bleed;
+    var margin = EF.px(BTN_MARGIN), gap = EF.px(BTN_GAP), btnH = EF.px(BTN_H);
 
-  bind(btnAction, function () { game.action(); });
-  bind(btnBack, function () { game.back(); });
-  bind(btnMute, function () { game.toggleMute(); });
-
-  /* Mirror the game's state onto the three controls. Called every frame, so
-     it writes only on change - relabelling a button on every frame trashes
-     layout and makes the text flicker under the thumb. */
-  var padState = { label: '', action: null, back: null, muted: null };
-
-  function syncPad() {
-    if (!touch) return;
-
-    var label = game.actionLabel();
-    if (label !== padState.label) { btnAction.textContent = label; padState.label = label; }
-
-    var canAct = game.canAction();
-    if (canAct !== padState.action) { btnAction.disabled = !canAct; padState.action = canAct; }
-
-    /* The assertion this whole pad exists for: leaving an activity used to be
-       bound to ESC and nothing else, so on a phone the orchard, the yard and
-       the grove were one-way doors. */
-    var canBack = game.canBack();
-    if (canBack !== padState.back) { btnBack.disabled = !canBack; padState.back = canBack; }
-
-    if (game.muted !== padState.muted) {
-      btnMute.textContent = game.muted ? 'SOUND OFF' : 'SOUND ON';
-      btnMute.setAttribute('aria-pressed', game.muted ? 'true' : 'false');
-      padState.muted = game.muted;
+    if (!landscape) {
+      var backW = EF.px(BACK_W);
+      var y = (H + b.bottom) - margin - btnH;
+      var actionX = -b.x + margin + backW + gap;
+      var actionW = (W + b.x) - margin - actionX;
+      padGeom = {
+        back:   { x: -b.x + margin, y: y, w: backW, h: btnH },
+        action: { x: actionX, y: y, w: Math.max(EF.px(44), actionW), h: btnH }
+      };
+    } else {
+      var gutterCss = b.x * EF.cssPerUnit;
+      var btnW = Math.min(EF.px(GUTTER_CSS - BTN_MARGIN * 2), Math.max(EF.px(44), b.x - margin * 2));
+      var x = (W + b.x) - margin - btnW;
+      var totalH = btnH * 2 + gap;
+      var y0 = H * 0.5 - totalH * 0.5;
+      padGeom = {
+        action: { x: x, y: y0, w: btnW, h: btnH },
+        back:   { x: x, y: y0 + btnH + gap, w: btnW, h: btnH }
+      };
+      if (gutterCss < 44) padGeom = null;   // no honest room for a finger - drop the pad rather than crowd it
     }
+  }
+
+  function hitPad(x, y) {
+    if (!padGeom) return null;
+    var a = padGeom.action;
+    if (x >= a.x && x <= a.x + a.w && y >= a.y && y <= a.y + a.h) return 'action';
+    var k = padGeom.back;
+    if (x >= k.x && x <= k.x + k.w && y >= k.y && y <= k.y + k.h) return 'back';
+    return null;
+  }
+
+  function padButton(r, label, enabled, primary) {
+    var cx = r.x + r.w * 0.5, cy = r.y + r.h * 0.5;
+    ctx.save();
+    ctx.globalAlpha = enabled ? 1 : 0.4;
+
+    EF.deckle(ctx, r.x, r.y, r.w, r.h, Math.min(2.2, r.h * 0.06));
+    if (primary) {
+      var g = ctx.createLinearGradient(0, r.y, 0, r.y + r.h);
+      g.addColorStop(0, P.get('candleGold'));
+      g.addColorStop(1, P.get('ember'));
+      ctx.fillStyle = g;
+    } else {
+      ctx.fillStyle = P.rgba('bark', 0.94);
+    }
+    ctx.fill();
+    ctx.lineWidth = 1.8;
+    ctx.strokeStyle = P.rgba('candleGold', primary ? 0.7 : 0.32);
+    ctx.stroke();
+
+    /* one grain line, the same quiet wood-grain language as the signposts */
+    ctx.save();
+    ctx.clip();
+    ctx.strokeStyle = primary ? P.rgba('panel', 0.16) : P.rgba('barkDark', 0.4);
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(r.x, r.y + r.h * 0.68);
+    ctx.lineTo(r.x + r.w, r.y + r.h * 0.72);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.restore();
+
+    EF.text(ctx, label, cx, cy, primary ? 15 : 13, {
+      weight: '700',
+      color: primary ? P.get('panel') : P.rgba('cream', enabled ? 0.92 : 0.55),
+      halo: primary ? false : P.rgba('vignette', 0.45)
+    });
+  }
+
+  function drawPad() {
+    if (!touch || !padGeom) return;
+    padButton(padGeom.back, 'BACK', game.canBack(), false);
+    padButton(padGeom.action, game.actionLabel(), game.canAction(), true);
   }
 
   /* ---------------- keyboard ----------------------------------------- */
@@ -371,7 +432,7 @@
     last = ts;
     if (running) game.update(dt);
     game.render(ctx);
-    syncPad();
+    drawPad();
   }
 
   /* Backgrounding is an interruption, not a pause button: the orchard timer
@@ -403,12 +464,17 @@
     canvas: canvas,
     stage: stage,
     fit: fit,
-    version: '1.0.0',
+    version: '2.0.0',
 
     snapshot: function () { return game.snapshot(); },
     tap: function () { game.action(); },
     tapAt: function (x, y) { game.pointerDown(x, y); },
     moveTo: function (x, y) { game.pointerMove(x, y); },
+
+    /* For tests: the pad's current geometry and a tap dispatched through the
+       real hitPad()/onDown() decision, not a shortcut that skips it. */
+    padGeom: function () { return padGeom; },
+    tapClient: function (cx, cy) { onDown({ clientX: cx, clientY: cy, cancelable: false }); },
 
     /* Jump straight to a scene. For screenshots and for starting a test in
        the middle of the day without playing the first half of it. */

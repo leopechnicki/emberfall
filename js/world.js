@@ -30,14 +30,26 @@
 
   /* --------------------------------------------------------------- sky */
 
+  /* The sky, including everything in it.
+   *
+   * Bleed-aware throughout. In portrait the canvas is far taller than the
+   * 720x540 scene, and the band above the scene is where most of this now
+   * lives: the sun/moon, the stars, the haze and the skein of birds all
+   * position themselves against the SKY BAND (canvas top -> horizon) instead
+   * of against the scene box. A phone therefore gets a tall, composed sky
+   * rather than a 4:3 picture with dead space stacked on top of it. */
   W.sky = function (ctx, w, h, time) {
     P.sky(ctx, w, h);
+
+    var rect = EF.fullRect(w, h);
+    var horizon = h * 0.62;
+    var band = horizon - rect.y;          // the whole sky, top of canvas down
 
     /* Sun by day, moon by night - the SAME disc, moved and recoloured. Two
        separate objects that cross-fade always betray themselves at 50%. */
     var n = P.night;
     var sx = w * (0.76 - n * 0.44);
-    var sy = h * (0.17 + n * 0.02);
+    var sy = rect.y + band * (0.26 + n * 0.03);
     var r = 26 - n * 8;
 
     glows();
@@ -56,13 +68,15 @@
       ctx.globalAlpha = 1;
     }
 
-    /* Stars only after dusk has actually started. */
+    /* Stars only after dusk has actually started. Spread over the whole sky
+       band, and more of them when there is more sky to fill. */
     if (n > 0.35) {
       var a = (n - 0.35) / 0.65;
       var rnd = EF.rng(7717);
+      var count = Math.round(70 * EF.clamp(band / (h * 0.62), 1, 2.6));
       ctx.fillStyle = P.rgba('cream', 0.75 * a);
-      for (var i = 0; i < 70; i++) {
-        var x = rnd() * w, y = rnd() * h * 0.62;
+      for (var i = 0; i < count; i++) {
+        var x = rect.x + rnd() * rect.w, y = rect.y + rnd() * band;
         var tw = 0.55 + 0.45 * Math.sin(time * 1.6 + i * 2.1);
         ctx.globalAlpha = 0.75 * a * tw;
         ctx.fillRect(x, y, 1.6, 1.6);
@@ -70,29 +84,67 @@
       ctx.globalAlpha = 1;
     }
 
-    /* Long, soft cloud bands. Low contrast on purpose - they should read as
-       haze, not as shapes. */
+    /* Long, soft haze bands. Low contrast on purpose - they should read as
+       haze, not as shapes. Two passes so the band has a lit top edge and a
+       heavier underside: one light source, even in the clouds. */
     var rc = EF.rng(4242);
-    for (var c = 0; c < 5; c++) {
-      var cy = h * (0.08 + rc() * 0.30);
-      var cw = w * (0.28 + rc() * 0.4);
-      var cx = ((rc() * w) + time * (4 + c * 2)) % (w + cw) - cw * 0.5;
+    var bands = band > 600 ? 8 : 5;
+    for (var c = 0; c < bands; c++) {
+      var cy = rect.y + band * (0.10 + rc() * 0.62);
+      var cw = rect.w * (0.28 + rc() * 0.4);
+      var cx = ((rc() * rect.w) + time * (4 + c * 2)) % (rect.w + cw) - cw * 0.5 + rect.x;
       var ch = 10 + rc() * 14;
       ctx.fillStyle = P.rgba(n > 0.5 ? 'hillFar' : 'cream', 0.13);
       ctx.beginPath();
       ctx.ellipse(cx, cy, cw * 0.5, ch, 0, 0, TAU);
       ctx.fill();
+      ctx.fillStyle = P.rgba(n > 0.5 ? 'skyTop' : 'leafOchre', 0.07);
+      ctx.beginPath();
+      ctx.ellipse(cx + cw * 0.04, cy + ch * 0.55, cw * 0.44, ch * 0.5, 0, 0, TAU);
+      ctx.fill();
+    }
+
+    /* A skein of birds crossing the high sky. Only where there IS a high sky
+       (portrait), and only while it is light enough to see them. Seven hand
+       -placed chevrons in a loose V, not a scatter - a flock has a shape, and
+       that shape is most of what makes it read as birds rather than as
+       specks. */
+    if (band > 520 && n < 0.5) {
+      var bf = (1 - n / 0.5);
+      var bx = ((time * 9) % (rect.w + 260)) - 130 + rect.x;
+      var by = rect.y + band * 0.17;
+      var flock = [[0, 0], [-26, 9], [-52, 19], [-78, 30], [22, 12], [44, 24], [64, 37]];
+      ctx.save();
+      ctx.strokeStyle = P.rgba('barkDark', 0.34 * bf);
+      ctx.lineWidth = 1.8;
+      ctx.lineCap = 'round';
+      for (var bi = 0; bi < flock.length; bi++) {
+        var fx = bx + flock[bi][0], fy = by + flock[bi][1];
+        /* wingbeat, out of phase down the skein */
+        var beat = Math.sin(time * 3.4 + bi * 0.8) * 2.6;
+        var sp = 4.4 - bi * 0.18;
+        ctx.beginPath();
+        ctx.moveTo(fx - sp, fy + beat);
+        ctx.lineTo(fx, fy - 1.2);
+        ctx.lineTo(fx + sp, fy + beat);
+        ctx.stroke();
+      }
+      ctx.restore();
     }
   };
 
   /* ------------------------------------------------------------- hills */
 
-  function ridge(ctx, w, h, baseY, amp, seed, fill) {
+  /* Bleed-aware: the ridge spans the whole canvas width and closes on the
+     canvas floor, so on a phone it never leaves a wedge of bare sky in the
+     corner where the scene box used to end. */
+  function ridge(ctx, w, h, baseY, amp, seed, fill, rect) {
     var rnd = EF.rng(seed);
     var ph = [rnd() * TAU, rnd() * TAU, rnd() * TAU];
+    var x0 = rect.x, x1 = rect.x + rect.w, floor = rect.y + rect.h;
     ctx.beginPath();
-    ctx.moveTo(0, h);
-    for (var x = 0; x <= w; x += 8) {
+    ctx.moveTo(x0, floor);
+    for (var x = x0; x <= x1; x += 8) {
       var u = x / w;
       var y = baseY
         - Math.sin(u * 3.1 + ph[0]) * amp
@@ -100,7 +152,7 @@
         - Math.sin(u * 13.7 + ph[2]) * amp * 0.16;
       ctx.lineTo(x, y);
     }
-    ctx.lineTo(w, h);
+    ctx.lineTo(x1, floor);
     ctx.closePath();
     ctx.fillStyle = fill;
     ctx.fill();
@@ -108,9 +160,10 @@
 
   W.hills = function (ctx, w, h, horizon) {
     var hz = horizon === undefined ? h * 0.58 : horizon;
-    ridge(ctx, w, h, hz - 34, 22, 101, P.get('hillFar'));
-    ridge(ctx, w, h, hz - 12, 16, 202, P.get('hillMid'));
-    ridge(ctx, w, h, hz + 10, 11, 303, P.get('hillNear'));
+    var rect = EF.fullRect(w, h);
+    ridge(ctx, w, h, hz - 34, 22, 101, P.get('hillFar'), rect);
+    ridge(ctx, w, h, hz - 12, 16, 202, P.get('hillMid'), rect);
+    ridge(ctx, w, h, hz + 10, 11, 303, P.get('hillNear'), rect);
   };
 
   W.ground = function (ctx, w, h, y) {

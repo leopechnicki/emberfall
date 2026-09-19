@@ -4,15 +4,20 @@
    page around the game never fights the game.
 
    Values below are the literal hex codes from js/palette.js NIGHT:
-     #1C1230 skyTop   (the darkest value in Emberfall - no #000 anywhere)
-     #2B1A3E skyMid
-     #432449 skyLow
-     #FFD489 candleGold                                                    */
+     #1A100A skyTop   (warm near-black, the darkest value in Emberfall - no #000)
+     #2A1710 skyMid   (deep umber)
+     #4A2412 skyLow   (burnt sienna, near the horizon)
+     #FFD489 candleGold
+
+   There used to be a purple-plum trio of variables here, one shade per line
+   above. Klaudia named that colour specifically as the reason she rejected
+   the build, so it is gone - every value below sits in the warm amber/umber
+   band the rest of the game already lives in. */
 
 :root {
-  --plum-deep: #1C1230;
-  --plum: #2B1A3E;
-  --plum-warm: #432449;
+  --cocoa-deep: #1A100A;
+  --cocoa: #2A1710;
+  --ember-glow: #4A2412;
   --candle-gold: #FFD489;
   --cream: #FFF3DE;
 }
@@ -23,7 +28,7 @@ html, body {
   margin: 0;
   padding: 0;
   height: 100%;
-  background: var(--plum-deep);
+  background: var(--cocoa-deep);
   color: var(--cream);
   font-family: "Georgia", "Iowan Old Style", "Times New Roman", serif;
   overflow: hidden;
@@ -44,13 +49,19 @@ body {
   inset: 0;
   display: flex;
   flex-direction: column;
+  /* Deliberately NOT centred here: #app stretches to fill (the flex default),
+     and #stage - which fills #app via flex:1 1 auto - centres the canvas
+     inside ITSELF. Centring #app too used to make #stage hug the canvas's
+     current size instead of filling #app, which is a circular measurement:
+     fit() reads #stage's rect to decide the canvas size, so #stage has to be
+     the full box, not a box shaped by the canvas it is about to receive. */
   /* Respect iOS notches / home indicator. */
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   /* A warm glow behind the canvas, as if the page itself were lit by the
      lantern inside it. */
   background:
-    radial-gradient(120% 90% at 50% 12%, var(--plum-warm) 0%, rgba(67, 36, 73, 0) 62%),
-    linear-gradient(180deg, var(--plum) 0%, var(--plum-deep) 100%);
+    radial-gradient(120% 90% at 50% 12%, var(--ember-glow) 0%, rgba(74, 36, 18, 0) 62%),
+    linear-gradient(180deg, var(--cocoa) 0%, var(--cocoa-deep) 100%);
 }
 
 #stage {
@@ -62,6 +73,12 @@ body {
   justify-content: center;
 }
 
+/* On touch, js/main.js sizes the canvas to the WHOLE of #app's content box
+   (see fit()), so #stage must stop centring a smaller box inside itself and
+   simply match it - otherwise the flex centring here would fight the exact
+   pixel size main.js just computed. */
+body.touch #stage { flex: 0 0 auto; }
+
 #game {
   display: block;
   touch-action: none;
@@ -71,8 +88,17 @@ body {
   box-shadow:
     0 0 0 1px rgba(255, 212, 137, 0.20),
     0 0 40px rgba(255, 158, 74, 0.10),
-    0 18px 60px rgba(28, 18, 48, 0.72);
+    0 18px 60px rgba(26, 16, 10, 0.72);
   image-rendering: auto;
+}
+
+/* On touch the canvas IS the screen - see js/main.js fit(). A rounded,
+   drop-shadowed "window" reads as a picture sitting on a page; full-bleed
+   edge-to-edge is what makes the valley read as the whole app rather than
+   as an image floating on top of one. */
+body.touch #game {
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .noscript {
@@ -85,135 +111,3 @@ body {
   font-size: 16px;
   color: var(--candle-gold);
 }
-
-/* ----------------------------------------------------------------- the pad
-
-   Touch controls, and ONLY on touch. js/main.js adds body.touch when
-   (pointer: coarse) matches, so on a desktop everything below is inert and
-   the page is the page that was verified 47/47.
-
-   Why a DOM pad and not more canvas: the scene is a fixed 720x540 logical
-   space, so in portrait the canvas is already the full width of the phone and
-   cannot grow without cropping the grove out of frame. The 551 px underneath
-   it was dead. Anything drawn INSIDE the canvas shrinks with the canvas - a
-   44 px button in game units is 24 real pixels on a phone - so the controls
-   have to live outside it, in real CSS pixels, to be thumb-sized.
-
-   #pad's outer width/height are set in px by main.js fit(), which is the only
-   place that knows how much space the letterbox left. CSS owns what happens
-   inside it.                                                               */
-
-#pad { display: none; }
-
-body.touch #pad {
-  display: grid;
-  gap: 10px;
-  padding: 10px;
-  flex: 0 0 auto;
-
-  /* Portrait: the primary control gets a full-width row of its own, because
-     it is the one pressed hundreds of times in a run. BACK and MUTE share the
-     row below - they are pressed once each.
-
-     The rows are CAPPED rather than fractional, and the cluster is centred in
-     whatever height main.js hands over. A 4:3 scene on a tall phone leaves
-     ~550 px under the canvas; stretching three buttons to fill it made them
-     read as empty slabs with a word floating in the middle, which looked
-     broken rather than generous. Capped rows + align-content keep them
-     button-shaped and let the leftover be quiet background. */
-  grid-template-areas:
-    "action action"
-    "back   mute";
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: minmax(44px, 112px) minmax(44px, 84px);
-
-  /* end, not centre. A 4:3 scene on a 19.5:9 phone leaves a gap no layout can
-     delete, so the only question is where it goes. Centring the cluster put
-     half the gap between the canvas and the controls and half below them,
-     which marooned the buttons in the middle of nowhere. Anchoring them to
-     the bottom collects the whole gap into one quiet region under the scene
-     and puts the controls where a thumb already rests. */
-  align-content: end;
-}
-
-/* Landscape: the dead space is beside the canvas, not under it, so the pad
-   becomes a column. Stacked in press-frequency order with ACTION biggest. */
-body.touch.landscape #pad {
-  grid-template-areas:
-    "action"
-    "back"
-    "mute";
-  grid-template-columns: 1fr;
-  grid-template-rows: 1.6fr 1fr 1fr;
-}
-
-body.touch #pad button {
-  /* 44 CSS px is the documented minimum finger target (WCAG 2.5.5). The grid
-     rows are far larger than this in practice; the floor is here so a small
-     phone in landscape can never squeeze a control below usable. */
-  min-width: 44px;
-  min-height: 44px;
-  margin: 0;
-  padding: 4px 8px;
-
-  font-family: inherit;
-  font-size: clamp(13px, 3.4vmin, 20px);
-  font-weight: 700;
-  letter-spacing: 1px;
-  color: var(--cream);
-
-  border-radius: 14px;
-  border: 1.5px solid rgba(255, 212, 137, 0.34);
-  background:
-    linear-gradient(180deg, rgba(255, 212, 137, 0.13) 0%, rgba(67, 36, 73, 0.55) 100%);
-  box-shadow: 0 2px 0 rgba(28, 18, 48, 0.55), inset 0 1px 0 rgba(255, 243, 222, 0.10);
-
-  /* body sets touch-action:none to kill pull-to-refresh over the game. A
-     button inside that needs its own value back, or the press is swallowed. */
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-  cursor: pointer;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-#pad-action { grid-area: action; }
-#pad-back   { grid-area: back; }
-#pad-mute   { grid-area: mute; }
-
-/* The one control pressed constantly reads as the lit one. */
-body.touch #pad-action {
-  color: #2B1A3E;
-  border-color: rgba(255, 212, 137, 0.75);
-  background: linear-gradient(180deg, #FFD489 0%, #FF9E4A 100%);
-  font-size: clamp(15px, 4.2vmin, 24px);
-  text-shadow: 0 1px 0 rgba(255, 243, 222, 0.45);
-}
-
-/* Pressed state, not hover: a finger has no hover, and :hover on a touch
-   device sticks after the press and lies about what is armed. */
-body.touch #pad button:active { transform: translateY(1px); filter: brightness(1.12); }
-
-/* Disabled is honest rather than hidden. A BACK button that vanishes on the
-   title screen makes the pad's shape jump under the thumb every time the
-   state changes; a dimmed one stays where the muscle memory left it. */
-body.touch #pad button:disabled {
-  opacity: 0.32;
-  cursor: default;
-  filter: none;
-  background: linear-gradient(180deg, rgba(255, 243, 222, 0.06) 0%, rgba(67, 36, 73, 0.40) 100%);
-  color: var(--cream);
-  text-shadow: none;
-}
-
-body.touch #pad button:focus-visible {
-  outline: 2px solid var(--candle-gold);
-  outline-offset: 2px;
-}
-
-/* main.js sizes #stage to the canvas exactly on touch, so it must stop
-   greedily eating the flex line. */
-body.touch #stage { flex: 0 0 auto; }
-body.touch.landscape #app { flex-direction: row; }
-body.touch #app { align-items: center; justify-content: center; }

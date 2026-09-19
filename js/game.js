@@ -564,8 +564,9 @@
       else if (this.state === 'dusk') this._duskHud(ctx);
       else if (this.state === 'summary') this._summary(ctx);
       else if (this.state === 'stash') {
+        var rs = EF.fullRect(W, H);
         ctx.fillStyle = P.rgba('vignette', 0.45);
-        ctx.fillRect(0, 0, W, H);
+        ctx.fillRect(rs.x, rs.y, rs.w, rs.h);
         EF.Stash.drawLockedCard(ctx, W, H, this.t);
       }
     }
@@ -580,8 +581,9 @@
 
     if (this.trans) {
       var f = this.trans.t < 1 ? this.trans.t : (2 - this.trans.t);
+      var rt = EF.fullRect(W, H);
       ctx.fillStyle = P.rgba('vignette', EF.clamp(f, 0, 1) * 0.96);
-      ctx.fillRect(0, 0, W, H);
+      ctx.fillRect(rt.x, rt.y, rt.w, rt.h);
     }
   };
 
@@ -771,8 +773,9 @@
 
   Game.prototype._summary = function (ctx) {
     var T = this.tally;
+    var rv = EF.fullRect(W, H);
     ctx.fillStyle = P.rgba('vignette', 0.42);
-    ctx.fillRect(0, 0, W, H);
+    ctx.fillRect(rv.x, rv.y, rv.w, rv.h);
 
     var cw = 432, ch = 340, x = (W - cw) * 0.5, y = (H - ch) * 0.5 - 8;
     EF.card(ctx, x, y, cw, ch, 0.95);
