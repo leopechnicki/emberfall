@@ -62,6 +62,11 @@
     var landscape = (global.innerWidth || 1) > (global.innerHeight || 1);
     document.body.classList.toggle('touch', touch);
     document.body.classList.toggle('landscape', touch && landscape);
+    /* The renderer draws its own footer hint and needs to know whether this
+       device has an Esc key - game.js:706 reads EF.touch to choose between
+       'ESC - back to the valley' and 'BACK - to the valley'. Nothing set it
+       before, so a phone was told to press a key it does not have. */
+    EF.touch = touch;
     return landscape;
   }
 
@@ -73,8 +78,14 @@
      wrong was the 551 px of dead plum left over in portrait, not the canvas.
      These two fractions turn that leftover into the controls.
      The ceilings stop a tall phone from rendering three absurd slabs. */
-  var PAD_PORTRAIT = 0.34, PAD_PORTRAIT_MAX = 320;
   var PAD_LANDSCAPE = 0.30, PAD_LANDSCAPE_MAX = 300;
+
+  /* Portrait floor: enough for two rows of 44 px controls plus the gaps and
+     padding CSS puts around them. The pad then takes everything the canvas
+     does not, and CSS centres the buttons inside that - which is why the
+     canvas sits flush under the status bar instead of floating in the middle
+     of the screen with a dead plum band above AND below it. */
+  var PAD_PORTRAIT_MIN = 150;
 
   function fit() {
     var landscape = applyMode();
@@ -100,20 +111,21 @@
     var availW = Math.max(1, r.width - num(cs.paddingLeft) - num(cs.paddingRight));
     var availH = Math.max(1, r.height - num(cs.paddingTop) - num(cs.paddingBottom));
 
-    var padW, padH, boxW, boxH;
+    var padW, padH, size;
     if (landscape) {
       padW = Math.min(Math.round(availW * PAD_LANDSCAPE), PAD_LANDSCAPE_MAX);
       padH = availH;
-      boxW = availW - padW;
-      boxH = availH;
+      size = sizeCanvas(availW - padW, availH);
     } else {
-      padH = Math.min(Math.round(availH * PAD_PORTRAIT), PAD_PORTRAIT_MAX);
+      /* Size the canvas against the space left once the pad's FLOOR is
+         reserved, then give the pad whatever the canvas actually left over.
+         In portrait a 4:3 scene is width-limited, so that remainder is large
+         and real - reserving only a fixed slice of it is what left bands of
+         unused plum at both ends of the screen. */
+      size = sizeCanvas(availW, availH - PAD_PORTRAIT_MIN);
       padW = availW;
-      boxW = availW;
-      boxH = availH - padH;
+      padH = Math.max(PAD_PORTRAIT_MIN, availH - size.h);
     }
-
-    var size = sizeCanvas(boxW, boxH);
 
     /* Shrink-wrap the stage onto the canvas so the pad sits against the
        artwork instead of across a band of leftover plum. */

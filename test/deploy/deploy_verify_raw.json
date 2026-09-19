@@ -1,0 +1,185 @@
+{
+  "project": "EMBERFALL",
+  "live_url": "https://leopechnicki.github.io/emberfall/",
+  "verified_at": "2026-09-19T18:45:40.426Z",
+  "browser": {
+    "channel": "chrome",
+    "version": "153.0.8010.50",
+    "fallback_reason": null
+  },
+  "device": {
+    "width": 390,
+    "height": 844,
+    "deviceScaleFactor": 3,
+    "hasTouch": true,
+    "isMobile": true
+  },
+  "summary": {
+    "total": 24,
+    "passed": 24,
+    "failed": 0,
+    "verdict": "PASS"
+  },
+  "checks": [
+    {
+      "check": "live https URL returns 200",
+      "pass": true,
+      "detail": "https://leopechnicki.github.io/emberfall/ -> 200"
+    },
+    {
+      "check": "served over https",
+      "pass": true,
+      "detail": "https://leopechnicki.github.io/emberfall/"
+    },
+    {
+      "check": "game boots on the deployed URL",
+      "pass": true,
+      "detail": "5182 ms to title, state=title, v1.0.0"
+    },
+    {
+      "check": "every script / stylesheet / asset request returns 200",
+      "pass": true,
+      "detail": "12 requests, all 200:  css/style.css js/audio.js js/palette.js js/swing.js js/utils.js js/main.js js/stash.js js/game.js js/rake.js js/world.js js/harvest.js"
+    },
+    {
+      "check": "all 10 game scripts loaded from the subpath",
+      "pass": true,
+      "detail": "10 scripts"
+    },
+    {
+      "check": "no asset escaped to the domain root (absolute-path regression)",
+      "pass": true,
+      "detail": "all under /emberfall/"
+    },
+    {
+      "check": "touch pad is visible on the deployed phone build",
+      "pass": true,
+      "detail": "pad-action 370x154  pad-back 180x103  pad-mute 180x103"
+    },
+    {
+      "check": "every control clears 44x44 CSS px",
+      "pass": true,
+      "detail": "pad-action 370x154  pad-back 180x103  pad-mute 180x103"
+    },
+    {
+      "check": "game + controls fill the phone screen",
+      "pass": true,
+      "detail": "69%"
+    },
+    {
+      "check": "TOUCH: a tap on the title opens the valley",
+      "pass": true,
+      "detail": "valley"
+    },
+    {
+      "check": "TOUCH: tapping THE HIGH GROVE opens the vine swing",
+      "pass": true,
+      "detail": "swing"
+    },
+    {
+      "check": "TOUCH: a tap hooks a vine and the keeper leaves the ground",
+      "pass": true,
+      "detail": "swinging=true, hooks=1, keeper airborne"
+    },
+    {
+      "check": "TOUCH: the swing mechanic actually advances the keeper downrange",
+      "pass": true,
+      "detail": "keeper=swing x=195 hooks=1 progress=3.4%"
+    },
+    {
+      "check": "TOUCH: the ACTION button hooks a vine too (no canvas poking needed)",
+      "pass": true,
+      "detail": "hooks 1 -> 2"
+    },
+    {
+      "check": "TOUCH: BACK leaves the grove with no Esc key",
+      "pass": true,
+      "detail": "valley"
+    },
+    {
+      "check": "TOUCH: the orchard opens on a tap",
+      "pass": true,
+      "detail": "harvest"
+    },
+    {
+      "check": "TOUCH: a finger drag moves the harvest basket",
+      "pass": true,
+      "detail": "basket 360 -> 610"
+    },
+    {
+      "check": "TOUCH: BACK leaves the orchard",
+      "pass": true,
+      "detail": "valley"
+    },
+    {
+      "check": "TOUCH: the yard opens on a tap",
+      "pass": true,
+      "detail": "rake"
+    },
+    {
+      "check": "TOUCH: a finger sweep banks leaves into piles",
+      "pass": true,
+      "detail": "piled 8/78"
+    },
+    {
+      "check": "TOUCH: BACK leaves the yard",
+      "pass": true,
+      "detail": "valley"
+    },
+    {
+      "check": "TOUCH: the SOUND control toggles",
+      "pass": true,
+      "detail": "false -> true"
+    },
+    {
+      "check": "console clean across the entire deployed walk",
+      "pass": true,
+      "detail": "zero errors, zero failed requests"
+    },
+    {
+      "check": "landscape still fills the screen after rotation",
+      "pass": true,
+      "detail": "92%"
+    }
+  ],
+  "screenshots": [
+    {
+      "file": "deploy_01_title_phone.png",
+      "note": "the title screen, 390x844 at dpr 3, on the live URL",
+      "bytes": 1194710
+    },
+    {
+      "file": "deploy_02_valley_phone.png",
+      "note": "the valley hub with the pad below it",
+      "bytes": 1208482
+    },
+    {
+      "file": "deploy_03_swing_airborne_phone.png",
+      "note": "MID-PLAY: keeper airborne on a vine, live URL, phone viewport",
+      "bytes": 1119441
+    },
+    {
+      "file": "deploy_04_harvest_phone.png",
+      "note": "MID-PLAY: the orchard, basket moved by a finger drag",
+      "bytes": 1104671
+    },
+    {
+      "file": "deploy_05_rake_phone.png",
+      "note": "MID-PLAY: the yard, leaves banked by finger sweeps",
+      "bytes": 1111261
+    },
+    {
+      "file": "deploy_06_landscape_phone.png",
+      "note": "rotated to landscape, pad beside the scene",
+      "bytes": 1801452
+    }
+  ],
+  "network": {
+    "requests": 12,
+    "non_200": 0
+  },
+  "console": {
+    "lines": 0,
+    "errors": 0
+  }
+}

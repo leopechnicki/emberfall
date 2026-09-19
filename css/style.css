@@ -113,12 +113,20 @@ body.touch #pad {
 
   /* Portrait: the primary control gets a full-width row of its own, because
      it is the one pressed hundreds of times in a run. BACK and MUTE share the
-     row below - they are pressed once each. */
+     row below - they are pressed once each.
+
+     The rows are CAPPED rather than fractional, and the cluster is centred in
+     whatever height main.js hands over. A 4:3 scene on a tall phone leaves
+     ~550 px under the canvas; stretching three buttons to fill it made them
+     read as empty slabs with a word floating in the middle, which looked
+     broken rather than generous. Capped rows + align-content keep them
+     button-shaped and let the leftover be quiet background. */
   grid-template-areas:
     "action action"
     "back   mute";
   grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1.5fr 1fr;
+  grid-template-rows: minmax(44px, 112px) minmax(44px, 84px);
+  align-content: center;
 }
 
 /* Landscape: the dead space is beside the canvas, not under it, so the pad
