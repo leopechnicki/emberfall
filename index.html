@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#2B1A3E">
+<meta name="description" content="EMBERFALL - a cozy autumn game. Thirty days of autumn in one valley: gather fruit in the orchard, rake leaves into wax, swing the vine grove, and light the village lanterns at dusk.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="EMBERFALL">
+<meta property="og:title" content="EMBERFALL - a cozy autumn game">
+<meta property="og:description" content="You are the keeper of the village lantern. Gather by day, light candles along the paths by night, reach the day-30 harvest festival with the valley glowing.">
+<!-- The public origin. This game is served as static files by GitHub Pages
+     from the repo root, so there is no server and nothing rewrites these at
+     serve time - they are simply the origin the game lives at.
+
+     Only these three are absolute, and they have to be: canonical and og:*
+     are meaningless as relative paths. EVERY other reference on this page
+     (css/, js/, the favicon) is relative on purpose, because Pages serves
+     the site from the /emberfall/ SUBPATH - a leading-slash "/js/main.js"
+     would resolve to leopechnicki.github.io/js/main.js and 404 in
+     production while working perfectly from file:// on a laptop. -->
+<link rel="canonical" href="https://leopechnicki.github.io/emberfall/">
+<meta property="og:url" content="https://leopechnicki.github.io/emberfall/">
+<meta property="og:image" content="https://leopechnicki.github.io/emberfall/screenshot.png">
+<meta name="twitter:card" content="summary_large_image">
+<title>EMBERFALL</title>
+<!-- Inline SVG favicon: a lit lantern in candle gold on deep plum. No file,
+     no request, and it still works from file://. -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2032%2032%27%3E%3Crect%20width%3D%2732%27%20height%3D%2732%27%20rx%3D%276%27%20fill%3D%27%232B1A3E%27%2F%3E%3Cpath%20d%3D%27M11%2024h10l-1.5-12h-7z%27%20fill%3D%27%23FFD489%27%2F%3E%3Crect%20x%3D%279%27%20y%3D%278%27%20width%3D%2714%27%20height%3D%273%27%20rx%3D%271%27%20fill%3D%27%2343291D%27%2F%3E%3Cpath%20d%3D%27M16%205a4%204%200%200%201%200%203%27%20fill%3D%27none%27%20stroke%3D%27%2343291D%27%20stroke-width%3D%271.6%27%2F%3E%3Cellipse%20cx%3D%2716%27%20cy%3D%2719%27%20rx%3D%272.2%27%20ry%3D%274%27%20fill%3D%27%23FF9E4A%27%2F%3E%3C%2Fsvg%3E">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="app">
+
+  <div id="stage">
+    <canvas id="game" width="720" height="540"
+            aria-label="Emberfall game canvas - an autumn valley at day 1 of 30" role="img"></canvas>
+    <noscript>
+      <p class="noscript">EMBERFALL needs JavaScript enabled to run.</p>
+    </noscript>
+  </div>
+
+  <!-- The touch control pad.
+       display:none until js/main.js sees (pointer: coarse) and adds
+       body.touch, so a desktop browser renders exactly the page it rendered
+       before this existed. It lives in the letterbox space the fixed 4:3
+       scene leaves on a phone - 551 px of dead plum in portrait - which is
+       why it is a SIBLING of #stage and never an overlay on top of it: an
+       overlay would swallow the canvas taps that ARE the game.
+
+       BACK is the one that mattered. Leaving an activity used to be bound to
+       ESC and nothing else, so on a phone the orchard, the yard and the grove
+       were one-way doors. -->
+  <div id="pad" aria-label="Touch controls">
+    <button id="pad-action" type="button">BEGIN</button>
+    <button id="pad-back" type="button" disabled>BACK</button>
+    <button id="pad-mute" type="button" aria-pressed="false">SOUND ON</button>
+  </div>
+
+</div>
+
+<!-- Plain scripts, deliberately, in dependency order.
+     ES modules are CORS-blocked on file://, and "double-click index.html and
+     it plays" is a requirement of this project - so the whole game hangs off
+     one global, window.EF, exactly the way SKYHOOK hangs off window.SK.
+
+       palette  - every colour in the game, and the day/night mix
+       utils    - clamp / damp / rng / store / particles / text + panels
+       world    - the valley's drawing kit (sky, trees, lanterns, the keeper)
+       audio    - the small WebAudio kit
+       harvest / rake / swing / stash  - the four activities
+       game     - the valley, the day, the tally, dusk
+       main     - canvas, input, loop                                      -->
+<script src="js/palette.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/world.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/harvest.js"></script>
+<script src="js/rake.js"></script>
+<script src="js/swing.js"></script>
+<script src="js/stash.js"></script>
+<script src="js/game.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

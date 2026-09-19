@@ -1,0 +1,10 @@
+node_modules/
+
+# Test output, not source. The verify + mobile suites regenerate all of this
+# on demand and the screenshot set alone is ~24 MB of PNGs.
+test/screenshots/
+test/verify/
+test/deploy/*.png
+
+# Local scratch probes from debugging sessions.
+test/_*.mjs

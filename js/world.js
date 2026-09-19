@@ -1,0 +1,531 @@
+/* EMBERFALL - the valley's drawing kit.
+ *
+ * Every piece of scenery the game paints lives here: sky, sun/moon, hills,
+ * trees, houses, the path, lanterns and candles. The three activities all draw
+ * the SAME valley with this module, which is the whole point of the design -
+ * harvest, raking and the vine swing are places inside one world, not three
+ * separate games with three separate looks.
+ *
+ * Nothing in this file contains a colour. Everything asks EF.Palette, so dusk
+ * is handled for free: set the night factor and the valley changes with it.
+ */
+(function (global) {
+  'use strict';
+
+  var EF = global.EF;
+  var P = EF.Palette;
+  var TAU = EF.TAU;
+
+  var W = {};
+
+  /* Pre-rendered glows. Built lazily so this file can be parsed before the
+     document is ready, and reused for every candle in the valley. */
+  var glowBig = null, glowSmall = null;
+  function glows() {
+    if (!glowBig) {
+      glowBig = EF.makeGlow(180, '255,196,110', 0.95);
+      glowSmall = EF.makeGlow(64, '255,214,140', 0.95);
+    }
+  }
+
+  /* --------------------------------------------------------------- sky */
+
+  W.sky = function (ctx, w, h, time) {
+    P.sky(ctx, w, h);
+
+    /* Sun by day, moon by night - the SAME disc, moved and recoloured. Two
+       separate objects that cross-fade always betray themselves at 50%. */
+    var n = P.night;
+    var sx = w * (0.76 - n * 0.44);
+    var sy = h * (0.17 + n * 0.02);
+    var r = 26 - n * 8;
+
+    glows();
+    EF.drawGlow(ctx, glowBig, sx, sy, (1.05 - n * 0.35), 0.45 - n * 0.2);
+    ctx.fillStyle = P.get('sun');
+    ctx.beginPath();
+    ctx.arc(sx, sy, r, 0, TAU);
+    ctx.fill();
+    if (n > 0.55) {
+      /* Bite a crescent out of the moon with the sky colour behind it. */
+      ctx.fillStyle = P.get('skyTop');
+      ctx.globalAlpha = (n - 0.55) / 0.45;
+      ctx.beginPath();
+      ctx.arc(sx - r * 0.42, sy - r * 0.18, r * 0.92, 0, TAU);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    /* Stars only after dusk has actually started. */
+    if (n > 0.35) {
+      var a = (n - 0.35) / 0.65;
+      var rnd = EF.rng(7717);
+      ctx.fillStyle = P.rgba('cream', 0.75 * a);
+      for (var i = 0; i < 70; i++) {
+        var x = rnd() * w, y = rnd() * h * 0.62;
+        var tw = 0.55 + 0.45 * Math.sin(time * 1.6 + i * 2.1);
+        ctx.globalAlpha = 0.75 * a * tw;
+        ctx.fillRect(x, y, 1.6, 1.6);
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    /* Long, soft cloud bands. Low contrast on purpose - they should read as
+       haze, not as shapes. */
+    var rc = EF.rng(4242);
+    for (var c = 0; c < 5; c++) {
+      var cy = h * (0.08 + rc() * 0.30);
+      var cw = w * (0.28 + rc() * 0.4);
+      var cx = ((rc() * w) + time * (4 + c * 2)) % (w + cw) - cw * 0.5;
+      var ch = 10 + rc() * 14;
+      ctx.fillStyle = P.rgba(n > 0.5 ? 'hillFar' : 'cream', 0.13);
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, cw * 0.5, ch, 0, 0, TAU);
+      ctx.fill();
+    }
+  };
+
+  /* ------------------------------------------------------------- hills */
+
+  function ridge(ctx, w, h, baseY, amp, seed, fill) {
+    var rnd = EF.rng(seed);
+    var ph = [rnd() * TAU, rnd() * TAU, rnd() * TAU];
+    ctx.beginPath();
+    ctx.moveTo(0, h);
+    for (var x = 0; x <= w; x += 8) {
+      var u = x / w;
+      var y = baseY
+        - Math.sin(u * 3.1 + ph[0]) * amp
+        - Math.sin(u * 7.3 + ph[1]) * amp * 0.34
+        - Math.sin(u * 13.7 + ph[2]) * amp * 0.16;
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(w, h);
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+  }
+
+  W.hills = function (ctx, w, h, horizon) {
+    var hz = horizon === undefined ? h * 0.58 : horizon;
+    ridge(ctx, w, h, hz - 34, 22, 101, P.get('hillFar'));
+    ridge(ctx, w, h, hz - 12, 16, 202, P.get('hillMid'));
+    ridge(ctx, w, h, hz + 10, 11, 303, P.get('hillNear'));
+  };
+
+  W.ground = function (ctx, w, h, y) {
+    var g = ctx.createLinearGradient(0, y, 0, h);
+    g.addColorStop(0, P.get('ground'));
+    g.addColorStop(1, P.get('groundDark'));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, y, w, h - y);
+
+    /* Scattered moss tufts so the ground is not a flat slab. */
+    var rnd = EF.rng(555);
+    for (var i = 0; i < 90; i++) {
+      var x = rnd() * w;
+      var yy = y + rnd() * (h - y);
+      var s = 2 + rnd() * 4;
+      ctx.fillStyle = P.rgba(rnd() > 0.5 ? 'leafMoss' : 'mossDeep', 0.35);
+      ctx.beginPath();
+      ctx.ellipse(x, yy, s, s * 0.5, 0, 0, TAU);
+      ctx.fill();
+    }
+  };
+
+  /* A winding golden track - this is where the candles go at dusk. */
+  W.path = function (ctx, w, h, y) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(-20, h + 10);
+    ctx.quadraticCurveTo(w * 0.28, y + 54, w * 0.52, y + 16);
+    ctx.quadraticCurveTo(w * 0.74, y - 14, w + 20, y - 4);
+    ctx.lineWidth = 46;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = P.get('pathEdge');
+    ctx.stroke();
+    ctx.lineWidth = 34;
+    ctx.strokeStyle = P.get('path');
+    ctx.stroke();
+    ctx.restore();
+  };
+
+  /* -------------------------------------------------------------- tree */
+
+  /* Deterministic from `seed`, so the same tree is in the same place every
+     frame and in every screenshot. Canopy is a cluster of overlapping blobs
+     in four leaf colours - cheap, and it reads as hand-painted because no two
+     blobs share an edge. */
+  W.tree = function (ctx, x, groundY, scale, seed, opts) {
+    var o = opts || {};
+    var rnd = EF.rng(seed);
+    var s = scale;
+    var trunkH = (86 + rnd() * 34) * s;
+    var trunkW = (13 + rnd() * 6) * s;
+    var topY = groundY - trunkH;
+
+    /* trunk */
+    ctx.fillStyle = P.get('bark');
+    ctx.beginPath();
+    ctx.moveTo(x - trunkW * 0.62, groundY);
+    ctx.quadraticCurveTo(x - trunkW * 0.30, groundY - trunkH * 0.55, x - trunkW * 0.22, topY);
+    ctx.lineTo(x + trunkW * 0.22, topY);
+    ctx.quadraticCurveTo(x + trunkW * 0.30, groundY - trunkH * 0.55, x + trunkW * 0.62, groundY);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = P.rgba('barkDark', 0.5);
+    ctx.fillRect(x - trunkW * 0.55, groundY - trunkH * 0.9, trunkW * 0.22, trunkH * 0.9);
+
+    /* three boughs */
+    ctx.strokeStyle = P.get('bark');
+    ctx.lineCap = 'round';
+    for (var b = 0; b < 3; b++) {
+      var dir = b === 1 ? 0 : (b === 0 ? -1 : 1);
+      ctx.lineWidth = 6 * s;
+      ctx.beginPath();
+      ctx.moveTo(x, topY + 16 * s);
+      ctx.quadraticCurveTo(x + dir * 24 * s, topY - 4 * s, x + dir * 42 * s, topY - 22 * s);
+      ctx.stroke();
+    }
+
+    /* canopy */
+    var cols = o.bare ? ['bark'] : ['leafRusset', 'leafOrange', 'leafAmber', 'leafGold', 'leafOchre'];
+    var blobs = o.bare ? 0 : (14 + (rnd() * 6 | 0));
+    var cr = (48 + rnd() * 14) * s;
+    var cy = topY - 16 * s;
+    for (var i = 0; i < blobs; i++) {
+      var a = rnd() * TAU;
+      var d = Math.pow(rnd(), 0.6) * cr;
+      var bx = x + Math.cos(a) * d * 1.22;
+      var by = cy + Math.sin(a) * d * 0.74;
+      var br = (17 + rnd() * 15) * s;
+      ctx.fillStyle = P.rgba(cols[(rnd() * cols.length) | 0], 0.93);
+      ctx.beginPath();
+      ctx.ellipse(bx, by, br, br * 0.84, rnd() * TAU, 0, TAU);
+      ctx.fill();
+    }
+
+    /* A few fruit dots so an orchard tree reads as an orchard tree. */
+    if (o.fruit) {
+      for (var f = 0; f < 5; f++) {
+        var fa = rnd() * TAU, fd = rnd() * cr;
+        ctx.fillStyle = P.get('apple');
+        ctx.beginPath();
+        ctx.arc(x + Math.cos(fa) * fd * 1.15, cy + Math.sin(fa) * fd * 0.7, 4 * s, 0, TAU);
+        ctx.fill();
+      }
+    }
+
+    return { x: x, topY: topY, canopyY: cy, canopyR: cr };
+  };
+
+  /* Leaf litter at the foot of everything. Static, seeded. */
+  W.litter = function (ctx, w, y, h, seed, density) {
+    var rnd = EF.rng(seed || 909);
+    var cols = ['leafRusset', 'leafOrange', 'leafAmber', 'leafGold', 'leafOchre'];
+    var n = density || 120;
+    for (var i = 0; i < n; i++) {
+      var x = rnd() * w;
+      var yy = y + rnd() * h;
+      var s = 3 + rnd() * 4;
+      ctx.save();
+      ctx.translate(x, yy);
+      ctx.rotate(rnd() * TAU);
+      ctx.fillStyle = P.rgba(cols[(rnd() * 5) | 0], 0.75);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, s, s * 0.5, 0, 0, TAU);
+      ctx.fill();
+      ctx.restore();
+    }
+  };
+
+  /* ------------------------------------------------------------- house */
+
+  W.house = function (ctx, x, groundY, scale, lit) {
+    var s = scale;
+    var bw = 66 * s, bh = 46 * s;
+    var y = groundY - bh;
+    ctx.fillStyle = P.get('house');
+    ctx.fillRect(x - bw * 0.5, y, bw, bh);
+    ctx.fillStyle = P.rgba('houseDark', 0.55);
+    ctx.fillRect(x - bw * 0.5, y, bw * 0.22, bh);
+
+    /* roof */
+    ctx.fillStyle = P.get('roof');
+    ctx.beginPath();
+    ctx.moveTo(x - bw * 0.62, y + 2 * s);
+    ctx.lineTo(x, y - 30 * s);
+    ctx.lineTo(x + bw * 0.62, y + 2 * s);
+    ctx.closePath();
+    ctx.fill();
+
+    /* window - the one thing that is warm before the lanterns are lit */
+    var wx = x + 8 * s, wy = y + 14 * s, ws = 15 * s;
+    ctx.fillStyle = P.get('window');
+    ctx.fillRect(wx - ws * 0.5, wy, ws, ws);
+    ctx.strokeStyle = P.rgba('barkDark', 0.6);
+    ctx.lineWidth = 1.6 * s;
+    ctx.beginPath();
+    ctx.moveTo(wx, wy); ctx.lineTo(wx, wy + ws);
+    ctx.moveTo(wx - ws * 0.5, wy + ws * 0.5); ctx.lineTo(wx + ws * 0.5, wy + ws * 0.5);
+    ctx.stroke();
+
+    /* door */
+    ctx.fillStyle = P.get('barkDark');
+    EF.roundRect(ctx, x - 23 * s, groundY - 26 * s, 16 * s, 26 * s, 7 * s);
+    ctx.fill();
+
+    if (lit > 0) {
+      glows();
+      EF.drawGlow(ctx, glowSmall, wx, wy + ws * 0.5, 1.5 * s, 0.5 * lit);
+    }
+  };
+
+  /* ----------------------------------------------------------- lantern */
+
+  /* The keeper's lantern: the object the whole 30-day loop is about.
+     `lit` is 0..1 so lighting it is an animation, not a boolean flip. */
+  W.lantern = function (ctx, x, y, scale, lit, time) {
+    var s = scale;
+    glows();
+
+    /* post */
+    ctx.strokeStyle = P.get('barkDark');
+    ctx.lineWidth = 4 * s;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(x, y + 4 * s);
+    ctx.lineTo(x, y + 52 * s);
+    ctx.stroke();
+
+    var flick = 1;
+    if (lit > 0) {
+      flick = 0.86 + 0.14 * Math.sin(time * 9.1) + 0.06 * Math.sin(time * 21.3);
+      EF.drawGlow(ctx, glowBig, x, y - 4 * s, (0.5 + lit * 0.7) * s * flick, 0.70 * lit);
+    }
+
+    /* cage */
+    ctx.fillStyle = P.rgba('barkDark', 0.92);
+    ctx.beginPath();
+    ctx.moveTo(x - 12 * s, y + 6 * s);
+    ctx.lineTo(x - 9 * s, y - 12 * s);
+    ctx.lineTo(x + 9 * s, y - 12 * s);
+    ctx.lineTo(x + 12 * s, y + 6 * s);
+    ctx.closePath();
+    ctx.fill();
+
+    /* glass - warm even unlit, so it never looks like a dead prop */
+    ctx.fillStyle = lit > 0
+      ? P.rgba('candleGold', 0.35 + 0.6 * lit * flick)
+      : P.rgba('cream', 0.14);
+    ctx.beginPath();
+    ctx.moveTo(x - 9.5 * s, y + 4 * s);
+    ctx.lineTo(x - 7 * s, y - 10 * s);
+    ctx.lineTo(x + 7 * s, y - 10 * s);
+    ctx.lineTo(x + 9.5 * s, y + 4 * s);
+    ctx.closePath();
+    ctx.fill();
+
+    /* cap + hook */
+    ctx.fillStyle = P.get('barkDark');
+    ctx.fillRect(x - 13 * s, y - 17 * s, 26 * s, 6 * s);
+    ctx.strokeStyle = P.get('barkDark');
+    ctx.lineWidth = 2.6 * s;
+    ctx.beginPath();
+    ctx.arc(x, y - 21 * s, 5 * s, Math.PI * 0.15, Math.PI * 0.85, true);
+    ctx.stroke();
+
+    if (lit > 0) W.flame(ctx, x, y - 2 * s, s * (0.9 + 0.3 * lit), time, lit);
+  };
+
+  /* A path candle. Same light, smaller. */
+  W.candle = function (ctx, x, y, scale, lit, time) {
+    var s = scale;
+    glows();
+    if (lit > 0) EF.drawGlow(ctx, glowSmall, x, y - 6 * s, (1.1 + lit) * s, 0.72 * lit);
+    /* An unlit candle is a stub of wax in the grass, not a white peg. At 0.85
+       alpha the whole path read as scattered litter before a single flame was
+       spent; it has to be quiet until the player pays for it. */
+    ctx.fillStyle = P.rgba('cream', 0.30 + 0.55 * lit);
+    EF.roundRect(ctx, x - 3.2 * s, y - 10 * s, 6.4 * s, 12 * s, 2 * s);
+    ctx.fill();
+    ctx.fillStyle = P.rgba('barkDark', 0.35);
+    ctx.fillRect(x - 3.2 * s, y + 1 * s, 6.4 * s, 1.5 * s);
+    if (lit > 0) W.flame(ctx, x, y - 11 * s, s * 0.62, time + x, lit);
+  };
+
+  W.flame = function (ctx, x, y, s, time, a) {
+    var f = 0.85 + 0.15 * Math.sin(time * 11 + x * 0.3);
+    var prevOp = ctx.globalCompositeOperation;
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = a;
+    ctx.fillStyle = P.rgba('ember', 0.85);
+    ctx.beginPath();
+    ctx.ellipse(x, y - 4 * s, 3.4 * s * f, 7 * s * f, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = P.rgba('candleGold', 0.95);
+    ctx.beginPath();
+    ctx.ellipse(x, y - 4.6 * s, 1.8 * s * f, 4.4 * s * f, 0, 0, TAU);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = prevOp;
+  };
+
+  /* ----------------------------------------------------------- keeper */
+
+  /* The player character, drawn in ONE place so the valley, the orchard and
+     the vine grove are unarguably the same person. Options let a caller lean
+     her, swing her arm up to a rope, or dim the lantern she always carries -
+     everything else is fixed, because a silhouette that drifts between scenes
+     is how a game stops feeling like one world. */
+  W.keeper = function (ctx, x, y, o) {
+    o = o || {};
+    var s = o.scale === undefined ? 1 : o.scale;
+    var face = o.face === undefined ? 1 : o.face;
+    var time = o.time || 0;
+    var lit = o.lit === undefined ? 0.85 : o.lit;
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(o.rot || 0);
+    if (s !== 1) ctx.scale(s, s);
+
+    /* cloak */
+    ctx.fillStyle = P.get('leafRusset');
+    ctx.beginPath();
+    ctx.moveTo(0, -20);
+    ctx.quadraticCurveTo(-16, 2, -12, 22);
+    ctx.lineTo(12, 22);
+    ctx.quadraticCurveTo(16, 2, 0, -20);
+    ctx.closePath();
+    ctx.fill();
+    /* hood */
+    ctx.fillStyle = P.shade('leafRusset', -0.14);
+    ctx.beginPath(); ctx.arc(0, -22, 10, 0, TAU); ctx.fill();
+    /* face */
+    ctx.fillStyle = P.rgba('cream', 0.85);
+    ctx.beginPath(); ctx.ellipse(face * 3, -21, 5.2, 5.6, 0, 0, TAU); ctx.fill();
+    /* arm: up to the rope while swinging, out to the side otherwise */
+    ctx.strokeStyle = P.shade('leafRusset', -0.2);
+    ctx.lineWidth = 4.4; ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(0, -12);
+    if (o.swinging) ctx.lineTo(0, -30); else ctx.lineTo(face * 12, -4);
+    ctx.stroke();
+    /* the lantern, carried lit even by day - it is the job */
+    var lx = face * -11, ly = 6;
+    ctx.strokeStyle = P.get('barkDark'); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(lx, ly - 6); ctx.stroke();
+    W.candle(ctx, lx, ly, 0.8, lit, time);
+
+    ctx.restore();
+  };
+
+  /* --------------------------------------------------------- signpost */
+
+  /* A wooden sign in the grass. This is how the valley offers an activity:
+     a thing standing in the world you walk up to, not a menu button floating
+     over it. `locked` greys the plank and hangs a small latch on it. */
+  W.sign = function (ctx, x, y, label, sub, o) {
+    o = o || {};
+    var w = o.w || 132, h = o.h || 40;
+    var hover = o.hover ? 1 : 0;
+    var locked = !!o.locked;
+    var bob = Math.sin((o.time || 0) * 2.2 + x * 0.02) * (hover ? 1.6 : 0.5);
+
+    ctx.save();
+    ctx.translate(x, y + bob);
+
+    /* post */
+    ctx.strokeStyle = P.get('barkDark');
+    ctx.lineWidth = 6; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, 34); ctx.stroke();
+
+    /* plank */
+    ctx.fillStyle = P.rgba(locked ? 'barkDark' : 'bark', 0.95);
+    EF.roundRect(ctx, -w * 0.5, -h, w, h, 5);
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = P.rgba('candleGold', locked ? 0.16 : (0.30 + hover * 0.45));
+    ctx.stroke();
+
+    /* grain lines - two, enough to read as wood, few enough to stay quiet */
+    ctx.strokeStyle = P.rgba('barkDark', 0.35);
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.44, -h * 0.66); ctx.lineTo(w * 0.44, -h * 0.70);
+    ctx.moveTo(-w * 0.44, -h * 0.28); ctx.lineTo(w * 0.44, -h * 0.24);
+    ctx.stroke();
+
+    var ink = locked ? P.rgba('cream', 0.42)
+                     : P.rgba('candleGold', 0.85 + hover * 0.15);
+    EF.text(ctx, label, 0, -h + (sub ? 15 : h * 0.5), 14,
+      { color: ink, halo: P.rgba('vignette', 0.5), weight: '700' });
+    if (sub) {
+      EF.text(ctx, sub, 0, -h + 31, 11,
+        { color: P.rgba('cream', locked ? 0.4 : 0.72), halo: false, weight: '600' });
+    }
+
+    if (locked) {
+      ctx.fillStyle = P.rgba('cream', 0.30);
+      EF.roundRect(ctx, -5, -h - 11, 10, 9, 2);
+      ctx.fill();
+      ctx.strokeStyle = P.rgba('cream', 0.30);
+      ctx.lineWidth = 1.8;
+      ctx.beginPath(); ctx.arc(0, -h - 11, 3.4, Math.PI, 0); ctx.stroke();
+    } else if (hover) {
+      /* a warm ember hovering over the sign you are about to choose */
+      glows();
+      EF.drawGlow(ctx, glowSmall, 0, -h * 0.5, 1.5, 0.22);
+    }
+    ctx.restore();
+  };
+
+  /* ------------------------------------------------- ambient leaf fall */
+
+  /* Leaves drifting across every scene. Wind-aware, so the same gust that
+     pushes fruit in Harvest also tilts the background leaves. */
+  function Drift(count, w, h, seed) {
+    this.w = w; this.h = h;
+    this.items = [];
+    var rnd = EF.rng(seed || 1234);
+    for (var i = 0; i < count; i++) {
+      this.items.push({
+        x: rnd() * w, y: rnd() * h,
+        vy: 14 + rnd() * 30, sway: 0.4 + rnd() * 1.3, phase: rnd() * TAU,
+        s: 3 + rnd() * 4, rot: rnd() * TAU, spin: (rnd() - 0.5) * 1.6,
+        col: ['leafRusset', 'leafOrange', 'leafAmber', 'leafGold', 'leafOchre'][(rnd() * 5) | 0]
+      });
+    }
+  }
+  Drift.prototype.update = function (dt, wind) {
+    for (var i = 0; i < this.items.length; i++) {
+      var q = this.items[i];
+      q.phase += dt * q.sway;
+      q.y += q.vy * dt;
+      q.x += (Math.sin(q.phase) * 16 + (wind || 0) * 0.55) * dt;
+      q.rot += q.spin * dt;
+      if (q.y > this.h + 14) { q.y = -14; q.x = Math.random() * this.w; }
+      if (q.x < -20) q.x = this.w + 18;
+      if (q.x > this.w + 20) q.x = -18;
+    }
+  };
+  Drift.prototype.draw = function (ctx, alpha) {
+    var a = alpha === undefined ? 0.8 : alpha;
+    for (var i = 0; i < this.items.length; i++) {
+      var q = this.items[i];
+      ctx.save();
+      ctx.translate(q.x, q.y);
+      ctx.rotate(q.rot);
+      ctx.fillStyle = P.rgba(q.col, a);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, q.s, q.s * 0.5, 0, 0, TAU);
+      ctx.fill();
+      ctx.restore();
+    }
+  };
+  W.Drift = Drift;
+
+  EF.World = W;
+
+}(window));

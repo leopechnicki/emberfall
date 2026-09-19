@@ -1,0 +1,36 @@
+{
+  "name": "emberfall",
+  "version": "1.0.0",
+  "description": "EMBERFALL - a cozy autumn game. Thirty days of autumn in one valley: gather by day, light the lanterns at dusk. Zero dependencies, zero build step, runs from file://.",
+  "license": "MIT",
+  "private": false,
+  "type": "module",
+  "scripts": {
+    "start": "npx --yes serve .",
+    "test": "node test/smoke.mjs",
+    "test:smoke": "node test/smoke.mjs",
+    "test:headed": "node test/smoke.mjs --headed",
+    "shots": "node test/art_shots.mjs",
+    "test:art": "node test/art_shots.mjs",
+    "test:mobile": "node test/mobile.mjs",
+    "test:verify": "node test/verify.mjs",
+    "test:ci": "node test/verify.mjs && node test/mobile.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.55.1"
+  },
+  "keywords": [
+    "game",
+    "cozy",
+    "autumn",
+    "canvas",
+    "html5",
+    "no-build",
+    "vanilla-js"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/leopechnicki/emberfall.git"
+  },
+  "homepage": "https://leopechnicki.github.io/emberfall/"
+}
