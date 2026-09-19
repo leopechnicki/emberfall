@@ -1,7 +1,7 @@
 {
   "project": "EMBERFALL",
   "live_url": "https://leopechnicki.github.io/emberfall/",
-  "verified_at": "2026-09-19T18:45:40.426Z",
+  "verified_at": "2026-09-19T18:52:31.721Z",
   "browser": {
     "channel": "chrome",
     "version": "153.0.8010.50",
@@ -34,12 +34,12 @@
     {
       "check": "game boots on the deployed URL",
       "pass": true,
-      "detail": "5182 ms to title, state=title, v1.0.0"
+      "detail": "1078 ms to title, state=title, v1.0.0"
     },
     {
       "check": "every script / stylesheet / asset request returns 200",
       "pass": true,
-      "detail": "12 requests, all 200:  css/style.css js/audio.js js/palette.js js/swing.js js/utils.js js/main.js js/stash.js js/game.js js/rake.js js/world.js js/harvest.js"
+      "detail": "12 requests, all 200:  css/style.css js/main.js js/audio.js js/world.js js/rake.js js/utils.js js/harvest.js js/swing.js js/game.js js/palette.js js/stash.js"
     },
     {
       "check": "all 10 game scripts loaded from the subpath",
@@ -54,17 +54,17 @@
     {
       "check": "touch pad is visible on the deployed phone build",
       "pass": true,
-      "detail": "pad-action 370x154  pad-back 180x103  pad-mute 180x103"
+      "detail": "pad-action 370x112  pad-back 180x84  pad-mute 180x84"
     },
     {
       "check": "every control clears 44x44 CSS px",
       "pass": true,
-      "detail": "pad-action 370x154  pad-back 180x103  pad-mute 180x103"
+      "detail": "pad-action 370x112  pad-back 180x84  pad-mute 180x84"
     },
     {
       "check": "game + controls fill the phone screen",
       "pass": true,
-      "detail": "69%"
+      "detail": "100%"
     },
     {
       "check": "TOUCH: a tap on the title opens the valley",
@@ -84,7 +84,7 @@
     {
       "check": "TOUCH: the swing mechanic actually advances the keeper downrange",
       "pass": true,
-      "detail": "keeper=swing x=195 hooks=1 progress=3.4%"
+      "detail": "keeper=swing x=105 hooks=1 progress=0.5%"
     },
     {
       "check": "TOUCH: the ACTION button hooks a vine too (no canvas poking needed)",
@@ -119,7 +119,7 @@
     {
       "check": "TOUCH: a finger sweep banks leaves into piles",
       "pass": true,
-      "detail": "piled 8/78"
+      "detail": "piled 3/78"
     },
     {
       "check": "TOUCH: BACK leaves the yard",
@@ -146,32 +146,32 @@
     {
       "file": "deploy_01_title_phone.png",
       "note": "the title screen, 390x844 at dpr 3, on the live URL",
-      "bytes": 1194710
+      "bytes": 1153893
     },
     {
       "file": "deploy_02_valley_phone.png",
       "note": "the valley hub with the pad below it",
-      "bytes": 1208482
+      "bytes": 1162894
     },
     {
       "file": "deploy_03_swing_airborne_phone.png",
       "note": "MID-PLAY: keeper airborne on a vine, live URL, phone viewport",
-      "bytes": 1119441
+      "bytes": 1079105
     },
     {
       "file": "deploy_04_harvest_phone.png",
       "note": "MID-PLAY: the orchard, basket moved by a finger drag",
-      "bytes": 1104671
+      "bytes": 1075339
     },
     {
       "file": "deploy_05_rake_phone.png",
       "note": "MID-PLAY: the yard, leaves banked by finger sweeps",
-      "bytes": 1111261
+      "bytes": 1106540
     },
     {
       "file": "deploy_06_landscape_phone.png",
       "note": "rotated to landscape, pad beside the scene",
-      "bytes": 1801452
+      "bytes": 1812299
     }
   ],
   "network": {

@@ -1,22 +1,22 @@
 # EMBERFALL deployment verification
 # url: https://leopechnicki.github.io/emberfall/
-# generated: 2026-09-19T18:45:40.425Z
+# generated: 2026-09-19T18:52:31.720Z
 # browser: chrome 153.0.8010.50
 # viewport: 390x844 dpr3 hasTouch=true isMobile=true
 
 === NETWORK (12) ===
 200    document    https://leopechnicki.github.io/emberfall/
 200    stylesheet  https://leopechnicki.github.io/emberfall/css/style.css
-200    script      https://leopechnicki.github.io/emberfall/js/audio.js
-200    script      https://leopechnicki.github.io/emberfall/js/palette.js
-200    script      https://leopechnicki.github.io/emberfall/js/swing.js
-200    script      https://leopechnicki.github.io/emberfall/js/utils.js
 200    script      https://leopechnicki.github.io/emberfall/js/main.js
-200    script      https://leopechnicki.github.io/emberfall/js/stash.js
-200    script      https://leopechnicki.github.io/emberfall/js/game.js
-200    script      https://leopechnicki.github.io/emberfall/js/rake.js
+200    script      https://leopechnicki.github.io/emberfall/js/audio.js
 200    script      https://leopechnicki.github.io/emberfall/js/world.js
+200    script      https://leopechnicki.github.io/emberfall/js/rake.js
+200    script      https://leopechnicki.github.io/emberfall/js/utils.js
 200    script      https://leopechnicki.github.io/emberfall/js/harvest.js
+200    script      https://leopechnicki.github.io/emberfall/js/swing.js
+200    script      https://leopechnicki.github.io/emberfall/js/game.js
+200    script      https://leopechnicki.github.io/emberfall/js/palette.js
+200    script      https://leopechnicki.github.io/emberfall/js/stash.js
 
 === CONSOLE (0) ===
 (empty - no console output at all)
