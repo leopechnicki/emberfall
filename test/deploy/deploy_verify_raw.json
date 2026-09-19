@@ -1,7 +1,7 @@
 {
   "project": "EMBERFALL",
   "live_url": "https://leopechnicki.github.io/emberfall/",
-  "verified_at": "2026-09-19T18:52:31.721Z",
+  "verified_at": "2026-09-19T18:54:11.035Z",
   "browser": {
     "channel": "chrome",
     "version": "153.0.8010.50",
@@ -34,12 +34,12 @@
     {
       "check": "game boots on the deployed URL",
       "pass": true,
-      "detail": "1078 ms to title, state=title, v1.0.0"
+      "detail": "1094 ms to title, state=title, v1.0.0"
     },
     {
       "check": "every script / stylesheet / asset request returns 200",
       "pass": true,
-      "detail": "12 requests, all 200:  css/style.css js/main.js js/audio.js js/world.js js/rake.js js/utils.js js/harvest.js js/swing.js js/game.js js/palette.js js/stash.js"
+      "detail": "12 requests, all 200:  js/main.js js/stash.js js/utils.js js/game.js js/rake.js js/harvest.js js/audio.js js/palette.js js/world.js js/swing.js css/style.css"
     },
     {
       "check": "all 10 game scripts loaded from the subpath",
@@ -84,7 +84,7 @@
     {
       "check": "TOUCH: the swing mechanic actually advances the keeper downrange",
       "pass": true,
-      "detail": "keeper=swing x=105 hooks=1 progress=0.5%"
+      "detail": "keeper=swing x=112 hooks=1 progress=0.7%"
     },
     {
       "check": "TOUCH: the ACTION button hooks a vine too (no canvas poking needed)",
@@ -146,32 +146,32 @@
     {
       "file": "deploy_01_title_phone.png",
       "note": "the title screen, 390x844 at dpr 3, on the live URL",
-      "bytes": 1153893
+      "bytes": 1139612
     },
     {
       "file": "deploy_02_valley_phone.png",
       "note": "the valley hub with the pad below it",
-      "bytes": 1162894
+      "bytes": 1147819
     },
     {
       "file": "deploy_03_swing_airborne_phone.png",
       "note": "MID-PLAY: keeper airborne on a vine, live URL, phone viewport",
-      "bytes": 1079105
+      "bytes": 1066861
     },
     {
       "file": "deploy_04_harvest_phone.png",
       "note": "MID-PLAY: the orchard, basket moved by a finger drag",
-      "bytes": 1075339
+      "bytes": 1064250
     },
     {
       "file": "deploy_05_rake_phone.png",
       "note": "MID-PLAY: the yard, leaves banked by finger sweeps",
-      "bytes": 1106540
+      "bytes": 1095094
     },
     {
       "file": "deploy_06_landscape_phone.png",
       "note": "rotated to landscape, pad beside the scene",
-      "bytes": 1812299
+      "bytes": 1816356
     }
   ],
   "network": {

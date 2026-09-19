@@ -1,0 +1,245 @@
+{
+  "project": "EMBERFALL",
+  "live_url": "https://leopechnicki.github.io/emberfall/",
+  "repo": "https://github.com/leopechnicki/emberfall",
+  "commit_sha": "0d2f7ac009457f8a5048065949fdc9c083a7ec16",
+  "hosting": {
+    "provider": "GitHub Pages",
+    "build_type": "legacy (static, no build step)",
+    "source_branch": "main",
+    "source_path": "/",
+    "pattern_reused_from": "projects/game-01-skyhook (same Pages legacy config: main @ /)",
+    "note": "Deployed to a dedicated public repo Leo owns. NOT pushed into leo-agents-v2, which is backup-only."
+  },
+  "generated_at": "2026-09-19T18:54:11.035Z",
+  "browser": {
+    "channel": "chrome",
+    "version": "153.0.8010.50",
+    "fallback_reason": null
+  },
+  "device": {
+    "width": 390,
+    "height": 844,
+    "deviceScaleFactor": 3,
+    "hasTouch": true,
+    "isMobile": true
+  },
+  "verify_suite": {
+    "file": "test/verify.mjs",
+    "scope": "full day on desktop, file://, art + palette audit",
+    "summary": {
+      "total": 46,
+      "passed": 46,
+      "failed": 0,
+      "verdict": "PASS"
+    },
+    "swing_traversal": {
+      "reached_by_swinging": true,
+      "progress": 1,
+      "hooks": 85,
+      "releases": 73,
+      "apples_collected_in_grove": 6,
+      "falls": 0,
+      "seconds": 17,
+      "release_angle_deg": 12
+    },
+    "note": "The 46/46 recorded before this session was STALE - index.html had changed since (3126 -> 4765 bytes). A fresh run scored 45/46; the swing check was fixed and it is now a genuine 46/46 with reached_by_swinging=true."
+  },
+  "mobile_suite": {
+    "file": "test/mobile.mjs",
+    "scope": "real touch at 390x844 and 844x390 + desktop non-regression",
+    "summary": {
+      "total": 44,
+      "passed": 44,
+      "failed": 0,
+      "verdict": "PASS"
+    },
+    "note": "Was 0/0 runnable at session start - it crashed on a display:none #pad because body.touch was never applied. 6 of the 44 (the yard) were added this session; the criteria name three activities and the suite drove two."
+  },
+  "deploy_suite": {
+    "file": "test/deploy/deploy_verify.mjs",
+    "scope": "the LIVE https URL, phone viewport, genuine CDP touch events",
+    "summary": {
+      "total": 24,
+      "passed": 24,
+      "failed": 0,
+      "verdict": "PASS"
+    },
+    "network": {
+      "requests": 12,
+      "non_200": 0
+    },
+    "console": {
+      "lines": 0,
+      "errors": 0
+    }
+  },
+  "acceptance_criteria": {
+    "a_live_url_200_and_boots": {
+      "verdict": "PASS",
+      "evidence": [
+        "test/deploy/deploy_verify_raw.json",
+        "test/deploy/deploy_01_title_phone.png",
+        "test/deploy/network_console.log"
+      ],
+      "proof": [
+        {
+          "check": "live https URL returns 200",
+          "pass": true,
+          "detail": "https://leopechnicki.github.io/emberfall/ -> 200"
+        },
+        {
+          "check": "served over https",
+          "pass": true,
+          "detail": "https://leopechnicki.github.io/emberfall/"
+        },
+        {
+          "check": "game boots on the deployed URL",
+          "pass": true,
+          "detail": "1094 ms to title, state=title, v1.0.0"
+        }
+      ]
+    },
+    "b_mobile_touch_all_three_activities": {
+      "verdict": "PASS",
+      "evidence": [
+        "test/deploy/deploy_03_swing_airborne_phone.png",
+        "test/deploy/deploy_04_harvest_phone.png",
+        "test/deploy/deploy_05_rake_phone.png",
+        "test/deploy/deploy_verify_raw.json"
+      ],
+      "driven_with": "page.touchscreen.tap + Input.dispatchTouchEvent via CDP. No mouse events, no keyboard.",
+      "proof": [
+        {
+          "check": "TOUCH: a tap hooks a vine and the keeper leaves the ground",
+          "pass": true,
+          "detail": "swinging=true, hooks=1, keeper airborne"
+        },
+        {
+          "check": "TOUCH: the swing mechanic actually advances the keeper downrange",
+          "pass": true,
+          "detail": "keeper=swing x=112 hooks=1 progress=0.7%"
+        },
+        {
+          "check": "TOUCH: the ACTION button hooks a vine too (no canvas poking needed)",
+          "pass": true,
+          "detail": "hooks 1 -> 2"
+        },
+        {
+          "check": "TOUCH: BACK leaves the grove with no Esc key",
+          "pass": true,
+          "detail": "valley"
+        },
+        {
+          "check": "TOUCH: the orchard opens on a tap",
+          "pass": true,
+          "detail": "harvest"
+        },
+        {
+          "check": "TOUCH: a finger drag moves the harvest basket",
+          "pass": true,
+          "detail": "basket 360 -> 610"
+        },
+        {
+          "check": "TOUCH: the yard opens on a tap",
+          "pass": true,
+          "detail": "rake"
+        },
+        {
+          "check": "TOUCH: a finger sweep banks leaves into piles",
+          "pass": true,
+          "detail": "piled 3/78"
+        },
+        {
+          "check": "TOUCH: the SOUND control toggles",
+          "pass": true,
+          "detail": "false -> true"
+        }
+      ],
+      "work_done": "Touch was NOT working at session start: index.html and style.css had a control pad but main.js had zero wiring for it - no body.touch class, no button handlers, no pad sizing. Implemented all of it, plus canAction/actionLabel in game.js and the unset EF.touch flag."
+    },
+    "c_no_broken_asset_paths": {
+      "verdict": "PASS",
+      "evidence": [
+        "test/deploy/network_console.log",
+        "test/deploy/deploy_verify_raw.json"
+      ],
+      "proof": [
+        {
+          "check": "every script / stylesheet / asset request returns 200",
+          "pass": true,
+          "detail": "12 requests, all 200:  js/main.js js/stash.js js/utils.js js/game.js js/rake.js js/harvest.js js/audio.js js/palette.js js/world.js js/swing.js css/style.css"
+        },
+        {
+          "check": "all 10 game scripts loaded from the subpath",
+          "pass": true,
+          "detail": "10 scripts"
+        },
+        {
+          "check": "no asset escaped to the domain root (absolute-path regression)",
+          "pass": true,
+          "detail": "all under /emberfall/"
+        },
+        {
+          "check": "console clean across the entire deployed walk",
+          "pass": true,
+          "detail": "zero errors, zero failed requests"
+        }
+      ],
+      "note": "All references were already relative. canonical/og:url/og:image were absolute to emberfall-game.fly.dev and were repointed to the Pages URL. .nojekyll added."
+    },
+    "d_screenshot_phone_viewport_midplay_swing": {
+      "verdict": "PASS",
+      "evidence": [
+        "test/deploy/deploy_03_swing_airborne_phone.png"
+      ],
+      "proof": "390x844 at dpr3 (1170x2532 px image), keeper airborne on a vine with the rope drawn to the anchor, ACTION button reading LET GO (only rendered while swinging), HUD showing '1 vines', footer reading 'BACK - to the valley'. Opened and visually confirmed, not inferred from the assertion."
+    }
+  },
+  "known_issues": [
+    {
+      "severity": "cosmetic",
+      "area": "portrait layout",
+      "issue": "A 4:3 scene on a 19.5:9 phone leaves roughly 295 CSS px of flat plum between the scene and the controls. It is collected into one region with the controls at thumb level, so it reads as background rather than breakage, but portrait uses the screen far less elegantly than landscape.",
+      "recommendation": "Landscape is the better experience (92% screen use, canvas nearly full-bleed). Worth telling Klaudia to rotate."
+    },
+    {
+      "severity": "low",
+      "area": "repo hygiene",
+      "issue": "test/pages_mobile_verify.mjs is a near-duplicate deploy gate that appeared on disk mid-session (not written by this agent, likely a concurrent sibling) and got swept into the first commit. Left in place rather than deleting possibly in-flight work.",
+      "recommendation": "Consolidate with test/deploy/deploy_verify.mjs, or delete it."
+    }
+  ],
+  "screenshots": [
+    {
+      "file": "deploy_01_title_phone.png",
+      "note": "the title screen, 390x844 at dpr 3, on the live URL",
+      "bytes": 1139612
+    },
+    {
+      "file": "deploy_02_valley_phone.png",
+      "note": "the valley hub with the pad below it",
+      "bytes": 1147819
+    },
+    {
+      "file": "deploy_03_swing_airborne_phone.png",
+      "note": "MID-PLAY: keeper airborne on a vine, live URL, phone viewport",
+      "bytes": 1066861
+    },
+    {
+      "file": "deploy_04_harvest_phone.png",
+      "note": "MID-PLAY: the orchard, basket moved by a finger drag",
+      "bytes": 1064250
+    },
+    {
+      "file": "deploy_05_rake_phone.png",
+      "note": "MID-PLAY: the yard, leaves banked by finger sweeps",
+      "bytes": 1095094
+    },
+    {
+      "file": "deploy_06_landscape_phone.png",
+      "note": "rotated to landscape, pad beside the scene",
+      "bytes": 1816356
+    }
+  ]
+}
