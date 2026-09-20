@@ -54,6 +54,16 @@
   EF.bleed = { x: 0, top: 0, bottom: 0 };
   EF.cssPerUnit = 1;
 
+  /* True while the canvas is a tall phone screen (touch AND taller than it is
+     wide). main.js owns it; every scene reads it to choose between its
+     original 720x540 composition and a portrait one. */
+  EF.portrait = false;
+
+  /* Top of the on-canvas pad's strip, in logical units - published by
+     main.js, read by anything that must not draw under a thumb button.
+     null means there is no pad and the scene box is the whole story. */
+  EF.padTopY = null;
+
   /* The whole canvas, in logical units. Defaults to the scene itself, so a
      scene drawn before main.js has ever measured anything is unchanged. */
   EF.fullRect = function (w, h) {
@@ -68,6 +78,68 @@
       /* convenience, because half the call sites want edges not extents */
       right: sw + b.x,
       bottom: sh + b.bottom
+    };
+  };
+
+  /* --------------------------------------------------- the portrait frame
+   *
+   * The four scenes with a sky in them - the valley, the orchard, the yard
+   * and the grove - all had the same problem and all need the same three
+   * numbers to solve it, so they share them here rather than each carrying a
+   * private copy of 0.30 that drifts.
+   *
+   *   hz      where the horizon goes: SKY_SHARE down the WHOLE canvas, not
+   *           down the 720x540 scene box. This is the fix, in one line.
+   *   dy(d)   depth 0 (the horizon) to depth 1 (the player's feet), eased so
+   *           distance compresses toward the horizon the way it really does.
+   *           A linear field reads like a board game tipped at the camera.
+   *   ps(d)   perspective scale in REAL CSS PIXELS. This is the part that is
+   *           easy to get wrong: a 390 px phone drawing a 720-wide scene
+   *           renders everything at 54% of its authored size, so MOVING a
+   *           40-unit signpost up a taller screen leaves it just as
+   *           unreadable. Sizing through EF.px pins it to physical size on
+   *           the glass and the depth term varies it around that.
+   *
+   * Only ever called when EF.portrait is true. */
+  EF.SKY_SHARE = 0.30;
+  EF.DEPTH_POW = 1.25;
+
+  /* ------------------------------------------------------------- the HUD box
+   *
+   * The scene is composed in the 720x540 box; the HUD is not. A day card, a
+   * recipe card, a timer, a wind gauge and a mute button are CHROME - they
+   * belong to the edges of the SCREEN, and on a phone those are not the
+   * edges of the scene box. In portrait the box starts 818 units above the
+   * top of the canvas, so chrome at y=12 renders a third of the way down the
+   * sky, printed over the scene. That is what the first portrait pass
+   * shipped and it is the most obviously broken thing in the screenshot.
+   *
+   * The bottom stops at the on-canvas pad, so no HUD line is ever drawn
+   * underneath a thumb button.
+   *
+   * On desktop and in landscape this is EXACTLY (0,0,720,540) - the authored
+   * box - so neither layout moves by a pixel. */
+  EF.hudRect = function () {
+    if (!EF.portrait) {
+      return { x: 0, y: 0, w: 720, h: 540, right: 720, bottom: 540, cx: 360 };
+    }
+    var r = EF.fullRect(720, 540);
+    var bottom = (EF.padTopY === null || EF.padTopY === undefined)
+      ? r.bottom : Math.min(r.bottom, EF.padTopY);
+    return {
+      x: r.x, y: r.y, w: r.w, h: bottom - r.y,
+      right: r.right, bottom: bottom, cx: r.x + r.w * 0.5
+    };
+  };
+
+  EF.portraitFrame = function () {
+    var r = EF.fullRect(720, 540);
+    var hz = r.y + r.h * EF.SKY_SHARE;
+    var gd = Math.max(160, 540 - hz);
+    return {
+      hz: hz, gd: gd, top: r.y, bottom: r.bottom,
+      dy: function (d) { return hz + gd * Math.pow(d, EF.DEPTH_POW); },
+      ps: function (d) { return EF.px(54) / 40 * (0.72 + 0.42 * d); }
     };
   };
 

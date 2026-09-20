@@ -67,6 +67,100 @@
   var VINE_REST = 6;               // a vine you let go of hangs limp this long
   var DRIFT_V   = 38;              // cozy forward nudge while stood on grass
 
+  /* ---------------------------------------------------------- the grove box
+   *
+   * The grove is the one scene that is fixed WITHOUT touching a single
+   * coordinate of its world, and that is deliberate.
+   *
+   * Everything above this line is a tuned pendulum: REACH, MIN_LEN,
+   * ARC_CLEAR, HOP_V and GRAV are related to each other and to the anchor
+   * heights, and the long comment above says exactly how much work it took
+   * to get the keeper off the grass. Re-composing the grove the way the
+   * valley and the orchard were re-composed would mean re-deriving all of
+   * it, and any error would be a physics bug rather than a framing one.
+   *
+   * It does not need re-composing, because the grove already has a CAMERA
+   * and its input is tap-anywhere (Swing.pointer ignores x and y). So
+   * portrait changes the camera instead: a uniform zoom about the ground
+   * line, which shows a narrower, taller slice of exactly the same world.
+   * The simulation is untouched and byte-for-byte the build that was signed
+   * off; only the lens changes.
+   *
+   * The zoom is UNIFORM (same S in x and y). A vertical-only stretch would
+   * fill the screen just as well and would quietly turn every circular arc
+   * into an ellipse - a pendulum that visibly disagrees with its own rope.
+   *
+   *   S    zoom. There is a HARD CEILING on this one and it is not taste.
+   *        The keeper sits `lead` in from the left, so the world visible
+   *        ahead of her is view-lead, and a hook can be thrown REACH=230.
+   *        If view-lead drops below REACH the game starts offering grabs at
+   *        vines that are off the right-hand edge - the player is asked to
+   *        aim at something they cannot see. With lead = 0.32*view that
+   *        pins view >= 230/0.68 = 338, so S <= 720/338 = 2.13. 1.75 leaves
+   *        real margin: 411 units of view, 279 of them ahead of her.
+   *   GY   screen y the ground line lands on: low enough that the keeper
+   *        standing on the grass is clear of the thumb pad.
+   *
+   * A zoom that respects that ceiling cannot fill a 1558-unit-tall canvas on
+   * its own - the grove is only ~324 units from canopy to grass, so filling
+   * the phone by zoom alone would need S=4.8 and a 150-unit window. The band
+   * between the skyline and the grove is filled with PARALLAX TREE BANDS
+   * instead, which is what makes the depth read. Without them the gate still
+   * passes - bare ground counts as scene, it is not sky - and the screen
+   * still has a quarter of itself doing nothing, which is the whole
+   * complaint in yet another shape. */
+  var ZOOM = 1.75;
+  var GROUND_SCREEN_Y = 600;
+  var _sl = null, _slKey = '';
+
+  function layout() {
+    var b = EF.bleed;
+    var key = (EF.portrait ? 'p' : 'l') + b.x + '_' + b.top + '_' + b.bottom + '_' + EF.cssPerUnit;
+    if (_slKey !== key) { _slKey = key; _sl = EF.portrait ? tallGrove() : flatGrove(); }
+    return _sl;
+  }
+
+  function flatGrove() {
+    return {
+      tall: false, S: 1, GY: 0, hillY: 336,
+      gFill: GROUND_Y, bottom: VIEW_H, far: null,
+      lead: 250, camMax: WORLD_W - VIEW_W
+    };
+  }
+
+  function tallGrove() {
+    var F = EF.portraitFrame();
+    var r = EF.fullRect(VIEW_W, VIEW_H);
+    var view = VIEW_W / ZOOM;
+    return {
+      tall: true, S: ZOOM, GY: GROUND_SCREEN_Y, hillY: F.hz,
+      /* the grove floor runs from the skyline, so there is no dead band
+         between the hills and the trees */
+      gFill: F.hz + 22, bottom: r.bottom,
+      /* a treeline ON the skyline, drawn in SCREEN space - the zoomed world
+         layer is far too magnified to put anything believable at this
+         distance in it */
+      far: [
+        { x: 44, y: F.hz + 14, s: 0.42, seed: 301 },
+        { x: 198, y: F.hz + 8, s: 0.34, seed: 302 },
+        { x: 366, y: F.hz + 11, s: 0.38, seed: 303 },
+        { x: 534, y: F.hz + 7, s: 0.33, seed: 304 },
+        { x: 690, y: F.hz + 15, s: 0.44, seed: 305 }
+      ],
+      /* Two bands of grove between the skyline and the playable trees, each
+         scrolling at its own fraction of the camera so the distance reads.
+         They wrap on `span`, so the grove never runs out however far she
+         travels - a distant tree repeating is not something the eye tracks,
+         and 3400 units of hand-placed backdrop is not either. */
+      bands: [
+        { par: 0.22, span: 760, n: 5, y: F.hz + 104, s: 0.62, seed: 410 },
+        { par: 0.44, span: 690, n: 4, y: F.hz + 246, s: 0.98, seed: 520 },
+        { par: 0.66, span: 640, n: 4, y: F.hz + 432, s: 1.38, seed: 630 }
+      ],
+      lead: view * 0.32, camMax: WORLD_W - view
+    };
+  }
+
   function Swing(game, seed) {
     this.game = game;
     this.rnd = EF.rng(seed || 771122);
@@ -268,7 +362,8 @@
       }
     }
 
-    this.camX = EF.clamp(EF.damp(this.camX, p.x - 250, 0.09, dt), 0, WORLD_W - VIEW_W);
+    var Lc = layout();
+    this.camX = EF.clamp(EF.damp(this.camX, p.x - Lc.lead, 0.09, dt), 0, Lc.camMax);
     this.drift.update(dt, this.wind);
     this.particles.update(dt, this.wind * 0.3);
 
@@ -293,8 +388,32 @@
 
   /* ----------------------------------------------------------- drawing */
 
+  /* One wrapping parallax band of trees. `par` is how much of the camera it
+     takes: 0 is painted on the sky, 1 moves with the grove. Each tree is
+     drawn at its wrapped x and again one span either side, so a tree leaving
+     the screen on the left is already entering on the right and there is
+     never a seam. Deterministic jitter off the seed, so the backdrop is the
+     same backdrop in every frame and every screenshot. */
+  function drawBand(ctx, band, cam) {
+    var step = band.span / band.n;
+    var off = (cam * band.par) % band.span;
+    var rnd = EF.rng(band.seed);
+    for (var i = 0; i < band.n; i++) {
+      var jitterX = (rnd() - 0.5) * step * 0.5;
+      var jitterY = (rnd() - 0.5) * 26;
+      var jitterS = 0.82 + rnd() * 0.42;
+      var base = i * step + jitterX - off;
+      for (var k = -1; k <= 1; k++) {
+        var x = base + k * band.span;
+        if (x < -170 || x > VIEW_W + 170) continue;
+        Wd.tree(ctx, x, band.y + jitterY, band.s * jitterS, band.seed + i * 13);
+      }
+    }
+  }
+
   Swing.prototype.render = function (ctx) {
     var t = this.t, cam = this.camX;
+    var L = layout();
 
     Wd.sky(ctx, VIEW_W, VIEW_H, t);
 
@@ -302,11 +421,31 @@
        this reads as the SAME range of hills seen from further in. */
     ctx.save();
     ctx.translate(-cam * 0.12, 0);
-    Wd.hills(ctx, VIEW_W * 1.3, VIEW_H, 336);
+    Wd.hills(ctx, VIEW_W * 1.3, VIEW_H, L.hillY);
     ctx.restore();
 
+    /* In portrait the floor and the far treeline are BACKDROP: drawn in
+       screen space, before the world layer, so the zoomed grove stands on
+       them. The flat layouts keep drawing the ground mid-scene exactly where
+       they always did (further down). */
+    if (L.tall) {
+      Wd.ground(ctx, VIEW_W, VIEW_H, L.gFill);
+      Wd.litter(ctx, VIEW_W, L.gFill + 4, L.bottom - L.gFill - 4, 313, 420);
+      for (var q = 0; q < L.far.length; q++) {
+        Wd.tree(ctx, L.far[q].x, L.far[q].y, L.far[q].s, L.far[q].seed);
+      }
+      for (var bi = 0; bi < L.bands.length; bi++) drawBand(ctx, L.bands[bi], cam);
+    }
+
     ctx.save();
-    ctx.translate(-cam, 0);
+    if (L.tall) {
+      /* world (x,y) -> screen ((x-cam)*S, GY + (y-GROUND_Y)*S) */
+      ctx.translate(0, L.GY);
+      ctx.scale(L.S, L.S);
+      ctx.translate(-cam, -GROUND_Y);
+    } else {
+      ctx.translate(-cam, 0);
+    }
 
     /* far, faint tree line for depth */
     ctx.globalAlpha = 0.4;
@@ -356,8 +495,10 @@
       ctx.restore();
     }
 
-    Wd.ground(ctx, WORLD_W, VIEW_H, GROUND_Y);
-    Wd.litter(ctx, WORLD_W, GROUND_Y + 4, VIEW_H - GROUND_Y - 4, 313, 420);
+    if (!L.tall) {
+      Wd.ground(ctx, WORLD_W, VIEW_H, GROUND_Y);
+      Wd.litter(ctx, WORLD_W, GROUND_Y + 4, VIEW_H - GROUND_Y - 4, 313, 420);
+    }
 
     /* the high orchard platform at the end */
     this._goal(ctx);
@@ -418,7 +559,8 @@
   };
 
   Swing.prototype._hud = function (ctx) {
-    var x = 14, y = 12, w = 260, h = 66;
+    var hud = EF.hudRect();
+    var x = hud.x + 14, y = hud.y + 12, w = 260, h = 66;
     EF.card(ctx, x, y, w, h, 0.88);
     EF.text(ctx, 'TO THE HIGH ORCHARD', x + 12, y + 17, 13,
       { align: 'left', weight: '700', color: P.get('candleGold'), halo: false });

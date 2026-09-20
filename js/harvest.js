@@ -26,6 +26,81 @@
   var BASKET_Y = 448;
   var BASKET_HW = 46;        // half width of the catching mouth
 
+  /* ------------------------------------------------------- the orchard box
+   *
+   * Flat (desktop, landscape) returns the authored constants unchanged.
+   *
+   * Portrait re-composes for a tall screen the same way the valley does -
+   * horizon near the top, the orchard running toward the player - with one
+   * extra problem the valley does not have: the orchard is TIMED, and a
+   * phone screen is nearly three times taller than the box this was balanced
+   * in. Dropping fruit from the top of a 1558-unit canvas at the authored
+   * 128 units/second would turn a 45-second round into a slideshow.
+   *
+   * So the fall is scaled by distance: `fallK` is exactly the ratio of the
+   * portrait fall to the authored one, applied to every vertical velocity,
+   * which holds AIRTIME - and therefore the reaction window, the wind drift
+   * a fruit picks up on the way down, and the difficulty of the round -
+   * identical to the build that was signed off. The screen gets taller; the
+   * game does not get slower.
+   *
+   *   gFill   where the ground gradient starts (the horizon, in portrait)
+   *   floor   where a MISSED fruit lands - near the basket, not at gFill
+   *
+   * Those two are separate on purpose. Conflating them puts the orchard
+   * floor 900 units above the basket and every miss vanishes at the skyline.
+   */
+  var FLAT_SPAWN_Y = -24;
+  var _hl = null, _hlKey = '';
+
+  function layout() {
+    var b = EF.bleed;
+    var key = (EF.portrait ? 'p' : 'l') + b.x + '_' + b.top + '_' + b.bottom + '_' + EF.cssPerUnit;
+    if (_hlKey !== key) { _hlKey = key; _hl = EF.portrait ? tallOrchard() : flatOrchard(); }
+    return _hl;
+  }
+
+  function flatOrchard() {
+    return {
+      tall: false, hz: 350, gFill: GROUND_Y, floor: GROUND_Y,
+      basketY: BASKET_Y, basketS: 1,
+      spawnY: FLAT_SPAWN_Y, fallK: 1,
+      litterY: GROUND_Y + 4, litterH: 540 - GROUND_Y - 4, litterN: 150,
+      far: [[70, 0.86, 11], [210, 1.0, 22], [360, 0.92, 33], [510, 1.04, 44], [650, 0.88, 55]],
+      farY: GROUND_Y + 8, near: null
+    };
+  }
+
+  function tallOrchard() {
+    var F = EF.portraitFrame();
+    var hz = F.hz, dy = F.dy;
+    var basketY = 520;
+    var spawnY = F.top - 24;
+
+    return {
+      tall: true, hz: hz, gFill: hz, floor: basketY + 46,
+      basketY: basketY, basketS: 1.5,
+      spawnY: spawnY,
+      fallK: (basketY - spawnY) / (BASKET_Y - FLAT_SPAWN_Y),
+      litterY: hz + 6, litterH: F.bottom - hz - 6, litterN: 150,
+      /* the far row stands ON the horizon, so the ground painted next
+         covers nothing of it that should be seen */
+      far: [[52, 0.42, 11], [214, 0.36, 22], [378, 0.40, 33], [548, 0.34, 44], [688, 0.44, 55]],
+      farY: hz + 4,
+      /* and the orchard proper is rooted in the field, drawn AFTER the
+         ground - a tree planted below the horizon and drawn before the
+         ground slab is a tree nobody ever sees */
+      near: [
+        [96, dy(0.20), 1.05, 61, { fruit: true }],
+        [604, dy(0.26), 1.15, 62, { fruit: true }],
+        [24, dy(0.52), 1.70, 63, { fruit: true }],
+        [676, dy(0.60), 1.85, 64, { fruit: true }],
+        [190, dy(0.84), 2.30, 65, { fruit: true }],
+        [536, dy(0.94), 2.50, 66, { fruit: true }]
+      ]
+    };
+  }
+
   /* Ingredient roster. `good` items feed the village; the other two are the
      only way to lose progress. */
   var KINDS = {
@@ -82,7 +157,8 @@
   /* ------------------------------------------------------------ input */
 
   Harvest.prototype.pointer = function (x /*, y, down */) {
-    this.target = EF.clamp(x, BASKET_HW, 720 - BASKET_HW);
+    var phw = BASKET_HW * layout().basketS;
+    this.target = EF.clamp(x, phw, 720 - phw);
     this.axis = 0;
   };
   Harvest.prototype.setAxis = function (d) { this.axis = d; };
@@ -111,10 +187,11 @@
   Harvest.prototype._spawn = function () {
     var kind = this._pick();
     var k = KINDS[kind];
+    var L = layout();
     this.items.push({
-      kind: kind, x: 50 + this.rnd() * 620, y: -24,
+      kind: kind, x: 50 + this.rnd() * 620, y: L.spawnY,
       vx: (this.rnd() - 0.5) * 30,
-      vy: k.fall * (0.85 + this.rnd() * 0.35),
+      vy: k.fall * (0.85 + this.rnd() * 0.35) * L.fallK,
       rot: this.rnd() * TAU, spin: (this.rnd() - 0.5) * 3.2,
       r: k.r, caught: false
     });
@@ -172,7 +249,7 @@
       if (EF.Audio) EF.Audio.win();
       var gold = P.rgb('candleGold');
       for (var e = 0; e < 40; e++) {
-        this.particles.spawn(this.bx, BASKET_Y, (this.rnd() - 0.5) * 260, -120 - this.rnd() * 180,
+        this.particles.spawn(this.bx, layout().basketY, (this.rnd() - 0.5) * 260, -120 - this.rnd() * 180,
           0.8 + this.rnd() * 0.6, 4, gold, { gravity: 260, drag: 0.9, glow: true });
       }
     }
@@ -180,6 +257,7 @@
 
   Harvest.prototype.update = function (dt) {
     if (this.done) return;
+    var L = layout();
     this.t += dt;
     this.left = Math.max(0, this.left - dt);
 
@@ -203,7 +281,8 @@
     this.particles.update(dt, this.wind * 0.3);
 
     /* basket */
-    if (this.axis !== 0) this.target = EF.clamp(this.target + this.axis * 520 * dt, BASKET_HW, 720 - BASKET_HW);
+    var clampHw = BASKET_HW * L.basketS;
+    if (this.axis !== 0) this.target = EF.clamp(this.target + this.axis * 520 * dt, clampHw, 720 - clampHw);
     this.bx = EF.damp(this.bx, this.target, 0.055, dt);
 
     /* spawning */
@@ -227,18 +306,21 @@
       if (it.x < 14) { it.x = 14; it.vx = Math.abs(it.vx) * 0.4; }
       if (it.x > 706) { it.x = 706; it.vx = -Math.abs(it.vx) * 0.4; }
 
-      var mouthTop = BASKET_Y - 12;
-      if (it.y + it.r >= mouthTop && it.y - it.r <= BASKET_Y + 18 &&
-          Math.abs(it.x - this.bx) <= BASKET_HW + it.r * 0.4) {
+      /* The mouth is the basket AS DRAWN - both scale together, so what
+         looks like a catch is a catch. */
+      var bs = L.basketS, bhw = BASKET_HW * bs;
+      var mouthTop = L.basketY - 12 * bs;
+      if (it.y + it.r >= mouthTop && it.y - it.r <= L.basketY + 18 * bs &&
+          Math.abs(it.x - this.bx) <= bhw + it.r * 0.4) {
         this._catch(it);
         this.items.splice(i--, 1);
         continue;
       }
-      if (it.y - it.r > GROUND_Y + 10) {
+      if (it.y - it.r > L.floor + 10) {
         /* A miss just lands in the grass. Puff of leaf dust, no penalty. */
         if (k.good) {
           for (var d = 0; d < 5; d++) {
-            this.particles.spawn(it.x, GROUND_Y + 6, (this.rnd() - 0.5) * 70, -20 - this.rnd() * 40,
+            this.particles.spawn(it.x, L.floor + 6, (this.rnd() - 0.5) * 70, -20 - this.rnd() * 40,
               0.45, 3, P.rgb('leafOchre'), { gravity: 220, drag: 1.4 });
           }
         }
@@ -249,7 +331,7 @@
     if (this.left <= 0 && this.items.length === 0) this._finish();
     else if (this.left <= 0) {
       /* let the last few land rather than yanking the round away */
-      for (var j = 0; j < this.items.length; j++) this.items[j].vy += 220 * dt;
+      for (var j = 0; j < this.items.length; j++) this.items[j].vy += 220 * L.fallK * dt;
     }
   };
 
@@ -334,17 +416,29 @@
       ctx.translate((Math.random() - 0.5) * 7 * this.shake, (Math.random() - 0.5) * 7 * this.shake);
     }
 
+    var L = layout();
+
     Wd.sky(ctx, w, h, t);
-    Wd.hills(ctx, w, h, 350);
+    Wd.hills(ctx, w, h, L.hz);
 
     /* Orchard row. Seeded, so it is the same orchard every time. */
-    var rows = [[70, 0.86, 11], [210, 1.0, 22], [360, 0.92, 33], [510, 1.04, 44], [650, 0.88, 55]];
-    for (var i = 0; i < rows.length; i++) {
-      Wd.tree(ctx, rows[i][0], GROUND_Y + 8, rows[i][1], rows[i][2], { fruit: true });
+    var i;
+    for (i = 0; i < L.far.length; i++) {
+      Wd.tree(ctx, L.far[i][0], L.farY, L.far[i][1], L.far[i][2], { fruit: true });
     }
 
-    Wd.ground(ctx, w, h, GROUND_Y);
-    Wd.litter(ctx, w, GROUND_Y + 4, h - GROUND_Y - 4, 777, 150);
+    Wd.ground(ctx, w, h, L.gFill);
+    Wd.litter(ctx, w, L.litterY, L.litterH, 777, L.litterN);
+
+    /* The orchard the player is standing in, on top of the ground it grows
+       out of. Null in the flat layouts, where the single authored row above
+       is the whole orchard and the draw order is untouched. */
+    if (L.near) {
+      for (i = 0; i < L.near.length; i++) {
+        var nt = L.near[i];
+        Wd.tree(ctx, nt[0], nt[1], nt[2], nt[3], nt[4]);
+      }
+    }
 
     this.drift.draw(ctx, 0.55);
 
@@ -368,16 +462,20 @@
 
     if (this.toastT > 0) {
       var a = EF.clamp(this.toastT, 0, 1);
-      EF.text(ctx, this.toast, w * 0.5, GROUND_Y - 56, 21,
+      EF.text(ctx, this.toast, w * 0.5, L.basketY - 92, 21,
         { color: P.rgba('cream', a), halo: P.rgba('vignette', 0.5 * a) });
     }
   };
 
   Harvest.prototype._basket = function (ctx) {
-    var x = this.bx, y = BASKET_Y;
+    var L = layout();
+    var x = this.bx, y = L.basketY;
     var sq = 1 + this.pop * 0.16;
     ctx.save();
     ctx.translate(x, y);
+    /* One scale for the whole basket. The catch test in update() uses the
+       same L.basketS, so the mouth that catches is the mouth you can see. */
+    if (L.basketS !== 1) ctx.scale(L.basketS, L.basketS);
     ctx.scale(sq, 2 - sq);
 
     ctx.fillStyle = P.shade('cinnamon', -0.15);
@@ -415,7 +513,8 @@
 
   /* The recipe card - the round's whole brief, always on screen. */
   Harvest.prototype._card = function (ctx) {
-    var x = 14, y = 12, w = 232, h = 96;
+    var hud = EF.hudRect();
+    var x = hud.x + 14, y = hud.y + 12, w = 232, h = 96;
     EF.card(ctx, x, y, w, h, 0.9);
     EF.text(ctx, this.recipe.name, x + 12, y + 20, 17,
       { align: 'left', color: P.get('candleGold'), halo: P.rgba('vignette', 0.5) });
@@ -449,7 +548,8 @@
   Harvest.prototype._windGauge = function (ctx) {
     /* Inset from the right edge, not flush to it: the mute control lives at
        (692, 24) in every scene and the gauge was sitting under it. */
-    var x = 720 - 166, y = 12, w = 114, h = 44;
+    var hud = EF.hudRect();
+    var x = hud.right - 166, y = hud.y + 12, w = 114, h = 44;
     EF.card(ctx, x, y, w, h, 0.85);
     EF.text(ctx, 'WIND', x + w * 0.5, y + 13, 11,
       { weight: '700', color: P.rgba('cream', 0.7), halo: false });
@@ -469,13 +569,14 @@
   };
 
   Harvest.prototype._timer = function (ctx) {
-    var w = 260, x = 360 - w * 0.5, y = 14, h = 9;
+    var hud = EF.hudRect();
+    var w = 260, x = hud.cx - w * 0.5, y = hud.y + 14, h = 9;
     EF.roundRect(ctx, x, y, w, h, 4.5);
     ctx.fillStyle = P.rgba('panel', 0.45); ctx.fill();
     var u = this.left / ROUND;
     EF.roundRect(ctx, x, y, Math.max(3, w * u), h, 4.5);
     ctx.fillStyle = P.rgba(u < 0.2 ? 'leafRusset' : 'candleGold', 0.9); ctx.fill();
-    EF.text(ctx, Math.ceil(this.left) + 's', 360, y + 28, 14,
+    EF.text(ctx, Math.ceil(this.left) + 's', hud.cx, y + 28, 14,
       { weight: '700', color: P.rgba('cream', 0.85) });
   };
 

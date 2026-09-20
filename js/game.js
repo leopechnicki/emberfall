@@ -62,6 +62,222 @@
     { id: 'stash', x: 626, y: 498, w: 144, h: 34, label: 'SQUIRREL STASH', sub: '', locked: true }
   ];
 
+  /* ------------------------------------------------------ the valley layout
+   *
+   * Everything in the valley that HAS a position is decided here, and
+   * everything that READS a position - the draw, the signpost hit test, the
+   * dusk candle hit test - reads it from here. Two hand-kept copies of "where
+   * the ORCHARD sign is" is exactly how a sign ends up drawn in one place and
+   * tappable in another, and on a phone that bug is invisible until someone
+   * taps and nothing happens.
+   *
+   * On desktop and in landscape this returns the authored constants
+   * UNCHANGED - the same numbers that were signed off, in the same 720x540
+   * box. flatValley() is a transcription, not a calculation, and there is no
+   * portrait maths anywhere near those two layouts.
+   *
+   * In portrait it composes the same valley for a tall screen instead. This
+   * is the fix for the complaint that SURVIVED the canvas-coverage fix, and
+   * the two are worth telling apart because they look identical from the
+   * sofa. Coverage fixed "the canvas is a small box in a big dead page". It
+   * did not fix "the canvas is the whole phone but the valley is still laid
+   * out inside a 720x540 strip pinned to the bottom of it" - which rendered
+   * as two thirds empty sky with the game in a band underneath, measured at
+   * 66.7% sky / 24.5% scene by test/framing.mjs. Same complaint, second
+   * shape: the playfield squeezed into a tiny box.
+   *
+   * So portrait does not squeeze the authored composition - it re-composes.
+   * The horizon goes near the top, the valley runs the full DEPTH of the
+   * screen toward the player, and the path, the signposts, the candles and
+   * the keeper are placed along that depth with a perspective scale rather
+   * than lined up across a strip. A tall screen is depth; using it as depth
+   * is the whole idea.
+   */
+
+  /* The horizon share and the depth easing live on EF.portraitFrame() in
+     js/utils.js - the orchard, the yard and the grove need the same three
+     numbers and a private copy per scene is how 0.30 here becomes 0.34
+     there. */
+
+  var _vl = null, _vlKey = '';
+
+  function valleyLayout() {
+    var b = EF.bleed;
+    var key = (EF.portrait ? 'p' : 'l') + b.x + '_' + b.top + '_' + b.bottom + '_' + EF.cssPerUnit;
+    if (_vlKey !== key) { _vlKey = key; _vl = EF.portrait ? portraitValley(b) : flatValley(); }
+    return _vl;
+  }
+
+  function flatValley() {
+    return {
+      tall: false,
+      hz: HORIZON, gy: GROUND_Y,
+      houses: [[88, GROUND_Y + 6, 0.92], [208, GROUND_Y + 2, 0.74], [626, GROUND_Y + 6, 0.86]],
+      trees: [
+        [28, GROUND_Y + 10, 0.95, 11, null],
+        [152, GROUND_Y + 8, 0.70, 22, null],
+        [300, GROUND_Y + 6, 0.62, 33, null],
+        [470, GROUND_Y + 8, 0.66, 44, { fruit: true }],
+        [692, GROUND_Y + 12, 1.00, 55, null]
+      ],
+      path: null,
+      nearTrees: null,
+      litter: { y: GROUND_Y + 6, h: H - GROUND_Y - 6, n: 170 },
+      spots: SPOTS.map(function (s) {
+        return {
+          id: s.id, x: s.x, y: s.y, w: s.w, h: s.h, s: 1,
+          label: s.label, sub: s.sub, locked: s.locked
+        };
+      }),
+      candles: CANDLE_SPOTS.map(function (c) { return { x: c.x, y: c.y, s: c.s }; }),
+      lantern: { x: LANTERN.x, y: LANTERN.y, s: LANTERN.s },
+      keeper: { x: KEEPER.x, y: KEEPER.y, s: 1 }
+    };
+  }
+
+  function portraitValley(b) {
+    var F = EF.portraitFrame();
+    var top = F.top;                  // logical y of the top of the canvas
+    var bot = F.bottom;               // logical y of the bottom of the canvas
+    var hz = F.hz;
+    /* The composition stops at H: below that is the strip the on-canvas pad
+       owns. The GROUND still runs to the true canvas floor behind the pad -
+       a pad sitting on painted world reads as part of the place, and a pad
+       sitting on a hard edge reads as chrome bolted over a picture, which is
+       the review this game already failed once. */
+    var gd = F.gd;
+    var dy = F.dy, ps = F.ps;
+
+    /* Depths of the four signposts. Spread so that no two overlap even at
+       the near end where they are biggest: each occupies about 80*ps(d)
+       logical units of height, and the gaps here exceed that. */
+    var SD = [0.20, 0.44, 0.68, 0.92];
+    var SX = [215, 495, 205, 505];
+
+    var spots = SPOTS.map(function (s, i) {
+      return {
+        id: s.id, x: SX[i], y: dy(SD[i]), w: s.w, h: s.h, s: ps(SD[i]),
+        label: s.label, sub: s.sub, locked: s.locked
+      };
+    });
+
+    /* The village and the far woods sit ON the horizon, small, because they
+       are far away. Resisting the urge to scale these up is what keeps the
+       screen reading as depth instead of as a bigger flat strip. */
+    var houses = [
+      [96, hz + gd * 0.030, 0.80],
+      [232, hz + gd * 0.016, 0.62],
+      [604, hz + gd * 0.026, 0.74]
+    ];
+
+    /* Back to front. Three bands, and the middle one is the one the first
+       portrait pass forgot: with only a far treeline and a foreground pair,
+       the whole middle of a 1558-unit-tall canvas was bare brown ground and
+       the valley read as empty even though the horizon was in the right
+       place. Depth needs something AT every depth.
+
+       x is confined to [0,720] on purpose. In portrait EF.bleed.x is 0 - the
+       canvas is exactly 720 units wide - so the previous pass's framing trees
+       at x=-26 and x=742 rendered entirely off-screen and the foreground they
+       were supposed to provide never existed. Anything meant to be SEEN is
+       placed inside the box; only canopies may hang past the edge. */
+    /* The far treeline only. These stand ON the horizon, so the ground -
+       painted next - covers nothing of them that should be seen. */
+    var trees = [
+      [36, hz + gd * 0.034, 0.78, 11, null],
+      [168, hz + gd * 0.022, 0.58, 22, null],
+      [330, hz + gd * 0.014, 0.50, 33, null],
+      [486, hz + gd * 0.026, 0.56, 44, { fruit: true }],
+      [676, hz + gd * 0.040, 0.86, 55, null]
+    ];
+
+    /* Everything rooted BELOW the horizon, drawn after the ground.
+       Draw order is the whole reason this is a second list. _valley paints
+       sky, hills, trees, THEN ground - which is correct for a treeline on
+       the skyline and fatal for anything standing in the field: the first
+       version of this composition put four mid-ground trees and two big
+       foreground trees in the list above, and the ground slab painted over
+       all six of them. The valley rendered as bare brown and the trees were
+       not missing, they were buried. */
+    var near = [
+      /* middle distance, hugging the two edges so the path and the
+         signposts keep the centre of the screen */
+      [702, dy(0.24), 1.25, 101, { fruit: true }],
+      [18, dy(0.36), 1.45, 102, null],
+      [712, dy(0.62), 1.85, 103, null],
+      [12, dy(0.78), 2.10, 104, null],
+      /* the foreground pair: trunks at the very bottom of the world,
+         canopies reaching up the sides. These are most of the autumn colour
+         a phone actually sees, and they give the valley a front. */
+      [96, 600, 2.45, 77, null],
+      [648, 646, 2.70, 88, { fruit: true }]
+    ];
+
+    /* The track climbs from the player's feet to the horizon, wandering past
+       the signposts. Tapered hard - a constant-width ribbon running this far
+       up a portrait screen reads as a wall, not as a path. */
+    var path = {
+      pts: [
+        [366, bot + 60],
+        [332, dy(0.86)],
+        [430, dy(0.60)],
+        [316, dy(0.34)],
+        [378, dy(0.13)],
+        [358, hz + 3]
+      ],
+      w0: 300, w1: 20
+    };
+
+    /* Candles stand ON the track, so they are sampled FROM it rather than
+       hand-placed beside it - see W.samplePath. A candle floating a few
+       units off the path it is supposed to line is exactly the kind of small
+       wrong that makes a scene look assembled rather than drawn. */
+    var curve = EF.World.samplePath(path.pts, 64);
+    var CD = [0.90, 0.74, 0.56, 0.40, 0.26, 0.14];
+    var candles = CD.map(function (d) {
+      var p = onCurve(curve, 1 - d);
+      return { x: p[0] + 96 * d * 0.55, y: p[1], s: ps(d) * 0.62 };
+    });
+
+    var kd = 0.62, kp = onCurve(curve, 1 - kd);
+    var ld = 0.50, lp = onCurve(curve, 1 - ld);
+
+    return {
+      tall: true,
+      hz: hz, gy: hz,
+      houses: houses, trees: trees, nearTrees: near, path: path,
+      litter: { y: hz + 8, h: bot - hz - 8, n: 170 },
+      spots: spots, candles: candles,
+      lantern: { x: lp[0] - 104 * ld, y: lp[1], s: ps(ld) * 0.92 },
+      keeper: { x: kp[0] + 86 * kd, y: kp[1], s: ps(kd) * 0.80 }
+    };
+  }
+
+  /* Point at fraction u along a sampled curve. The curve runs near-end-first,
+     so callers pass 1-d to turn a DEPTH into a position on it. */
+  function onCurve(pts, u) {
+    var i = EF.clamp(Math.round(u * (pts.length - 1)), 0, pts.length - 1);
+    return pts[i];
+  }
+
+  /* ------------------------------------------------------------ the HUD box
+   *
+   * The scene is composed in the 720x540 box; the HUD is not. The day card,
+   * the hint line, the toast and the mute button are CHROME - they belong to
+   * the edges of the screen, and on a phone the edges of the screen are not
+   * the edges of the scene box. In portrait that box starts 818 units above
+   * the top of the canvas, so a day card at y=12 and a hint at y=126 render
+   * halfway down the sky, printed across the signposts. That is what the
+   * first portrait pass shipped and it is the most obviously broken thing in
+   * the screenshot.
+   *
+   * The bottom stops at the pad rather than at the canvas floor, so no HUD
+   * line is ever drawn underneath a thumb button.
+   *
+   * On desktop and in landscape this is EXACTLY (0,0,720,540) - the authored
+   * box - so neither layout moves by a pixel. */
+  function hudRect() { return EF.hudRect(); }
+
   function Game(seed) {
     this.seed = (seed === null || seed === undefined) ? 20260919 : seed;
     this.rnd = EF.rng(this.seed);
@@ -273,9 +489,10 @@
     this.toastT = 3.4;
     if (EF.Audio) EF.Audio.light();
     var gold = P.rgb('candleGold');
+    var ln = this._layout().lantern, ls = ln.s || 1;
     for (var i = 0; i < 46; i++) {
-      this.particles.spawn(LANTERN.x, LANTERN.y - 4, (this.rnd() - 0.5) * 150, -60 - this.rnd() * 150,
-        1.0 + this.rnd() * 0.8, 4, gold, { gravity: -30, drag: 0.7, glow: true });
+      this.particles.spawn(ln.x, ln.y - 4 * ls, (this.rnd() - 0.5) * 150, -60 - this.rnd() * 150,
+        1.0 + this.rnd() * 0.8, 4 * ls, gold, { gravity: -30, drag: 0.7, glow: true });
     }
     return true;
   };
@@ -347,20 +564,69 @@
 
   /* ------------------------------------------------------------- input */
 
-  Game.prototype._hit = function (x, y) {
-    for (var i = 0; i < SPOTS.length; i++) {
-      var s = SPOTS[i];
-      if (x >= s.x - s.w * 0.5 && x <= s.x + s.w * 0.5 && y >= s.y - s.h - 6 && y <= s.y + 34) return s;
+  /* The layout, plus the one piece of valley state that has to follow it.
+     The candles carry a lit/target animation that must survive an
+     orientation flip, so they are CONSTRUCTED once and their POSITIONS are
+     re-read from the layout whenever the layout changes. Baking the
+     positions in at construction - which is what the first portrait pass
+     did - left every candle, at dusk, sitting where the 720x540 valley used
+     to put it while the path it is supposed to line had moved. */
+  Game.prototype._layout = function () {
+    var L = valleyLayout();
+    if (this._lkey !== _vlKey) {
+      this._lkey = _vlKey;
+      for (var i = 0; i < this.candles.length && i < L.candles.length; i++) {
+        this.candles[i].x = L.candles[i].x;
+        this.candles[i].y = L.candles[i].y;
+        this.candles[i].s = L.candles[i].s;
+      }
     }
+    return L;
+  };
+
+  /* Hit-testing reads the SAME layout the draw does, scale included.
+     W.sign puts its origin at the foot of the post and draws the plank in
+     local coordinates from (-w/2,-h) to (w/2,0) before scaling by s, so a
+     box built from the unscaled w/h - the bug this replaces - was a
+     136-unit target under a sign drawn 375 units wide: tappable nowhere
+     near where it looked. */
+  Game.prototype._hit = function (x, y) {
+    var L = this._layout();
+    /* NEAREST FIRST - the reverse of the draw order, which paints back to
+       front. In portrait the near signs are two and a half times the size of
+       the far ones and they can overlap; testing front to back would hand a
+       tap to the sign UNDERNEATH the one the player is looking at. */
+    for (var i = L.spots.length - 1; i >= 0; i--) {
+      var s = L.spots[i], sc = s.s || 1;
+      if (x >= s.x - s.w * 0.5 * sc && x <= s.x + s.w * 0.5 * sc &&
+          y >= s.y - (s.h + 6) * sc && y <= s.y + 34 * sc) return s;
+    }
+    var ln = L.lantern, ls = ln.s || 1;
     if (this.duskReady() &&
-        x >= LANTERN.x - 30 && x <= LANTERN.x + 30 && y >= LANTERN.y - 34 && y <= LANTERN.y + 60) {
-      return { id: 'dusk', x: LANTERN.x, y: LANTERN.y };
+        x >= ln.x - 30 * ls && x <= ln.x + 30 * ls &&
+        y >= ln.y - 34 * ls && y <= ln.y + 60 * ls) {
+      return { id: 'dusk', x: ln.x, y: ln.y };
     }
     return null;
   };
 
   /* The mute control is the one thing that must work in every state. */
-  function inMute(x, y) { return EF.hypot(x - 692, y - 24) < 20; }
+  /* Drawn by _mute from the same two numbers, for the same reason the
+     signposts are: a control drawn in the screen's corner and hit-tested in
+     the scene box's corner is a mute button that does nothing on a phone. */
+  function muteAt() {
+    var hud = hudRect();
+    /* The glyph is authored at radius 15. On desktop s is exactly 1 and this
+       returns the original (692, 24). On a phone 15 units is 8 CSS px, which
+       is neither readable nor hittable, so it is sized off EF.px like every
+       other touch target. */
+    var s = EF.portrait ? Math.max(1, EF.px(17) / 15) : 1;
+    return { x: hud.right - 28 * s, y: hud.y + 24 * s, s: s };
+  }
+  function inMute(x, y) {
+    var m = muteAt();
+    return EF.hypot(x - m.x, y - m.y) < Math.max(20, EF.px(22));
+  }
 
   Game.prototype.pointerDown = function (x, y) {
     if (inMute(x, y)) { this.toggleMute(); return; }
@@ -487,6 +753,18 @@
     if (EF.Audio) EF.Audio.setMuted(this.muted);
   };
 
+  /* Where the signposts ACTUALLY are, for anything outside the game that
+     needs to point at one - the touch tests above all. A test that taps
+     hand-copied coordinates is the same "two hand-kept copies of where the
+     ORCHARD sign is" bug as a mismatched hit box, and it fails the same
+     way: silently, and only in the layout nobody ran. */
+  Game.prototype.spots = function () { return this._layout().spots; };
+
+  /* Where the mute control actually is. Same reason as spots(): it moved to
+     the screen's corner in portrait and a test aiming at the scene box's
+     corner was tapping empty sky. */
+  Game.prototype.muteSpot = function () { return muteAt(); };
+
   Game.prototype.pause = function () { this.paused = true; };
   Game.prototype.resume = function () { this.paused = false; };
 
@@ -575,7 +853,8 @@
 
     if (this.toastT > 0 && this.state !== 'summary') {
       var a = EF.clamp(this.toastT, 0, 1);
-      EF.text(ctx, this.toast, W * 0.5, H - 34, 17,
+      var ht = hudRect();
+      EF.text(ctx, this.toast, ht.cx, ht.bottom - 34, 17,
         { color: P.rgba('cream', a), halo: P.rgba('vignette', 0.55 * a) });
     }
 
@@ -594,29 +873,43 @@
     var t = this.t;
     var windowLit = 0.45 + this.night * 0.55;
 
+    var L = this._layout();
+    var i;
+
     Wd.sky(ctx, W, H, t);
-    Wd.hills(ctx, W, H, HORIZON);
+    Wd.hills(ctx, W, H, L.hz);
 
     /* the village, sitting back against the hills */
-    Wd.house(ctx, 88, GROUND_Y + 6, 0.92, windowLit);
-    Wd.house(ctx, 208, GROUND_Y + 2, 0.74, windowLit);
-    Wd.house(ctx, 626, GROUND_Y + 6, 0.86, windowLit);
+    for (i = 0; i < L.houses.length; i++) {
+      Wd.house(ctx, L.houses[i][0], L.houses[i][1], L.houses[i][2], windowLit);
+    }
+    /* Far trees first, then the near framing pair - back to front, so a
+       foreground tree overlaps the village rather than the other way round.
+       L.trees is authored in that order. */
+    for (i = 0; i < L.trees.length; i++) {
+      var tr = L.trees[i];
+      Wd.tree(ctx, tr[0], tr[1], tr[2], tr[3], tr[4] || undefined);
+    }
 
-    Wd.tree(ctx, 28, GROUND_Y + 10, 0.95, 11);
-    Wd.tree(ctx, 152, GROUND_Y + 8, 0.70, 22);
-    Wd.tree(ctx, 300, GROUND_Y + 6, 0.62, 33);
-    Wd.tree(ctx, 470, GROUND_Y + 8, 0.66, 44, { fruit: true });
-    Wd.tree(ctx, 692, GROUND_Y + 12, 1.00, 55);
+    Wd.ground(ctx, W, H, L.gy);
+    Wd.path(ctx, W, H, L.gy, L.path);
+    Wd.litter(ctx, W, L.litter.y, L.litter.h, 4242, L.litter.n);
 
-    Wd.ground(ctx, W, H, GROUND_Y);
-    Wd.path(ctx, W, H, GROUND_Y);
-    Wd.litter(ctx, W, GROUND_Y + 6, H - GROUND_Y - 6, 4242, 170);
+    /* Trees rooted in the field, on top of the ground they stand on. Empty
+       on desktop and in landscape, where every tree is on the skyline and
+       the authored draw order above is untouched. */
+    if (L.nearTrees) {
+      for (i = 0; i < L.nearTrees.length; i++) {
+        var nt = L.nearTrees[i];
+        Wd.tree(ctx, nt[0], nt[1], nt[2], nt[3], nt[4] || undefined);
+      }
+    }
 
     /* signposts, back to front */
-    for (var i = SPOTS.length - 1; i >= 0; i--) {
-      var s = SPOTS[i];
+    for (i = L.spots.length - 1; i >= 0; i--) {
+      var s = L.spots[i];
       Wd.sign(ctx, s.x, s.y, s.label, this.doneModes[s.id] ? 'done today' : s.sub, {
-        w: s.w, h: s.h, time: t, locked: s.locked,
+        w: s.w, h: s.h, s: s.s, time: t, locked: s.locked,
         hover: this.state === 'valley' && this.hover && this.hover.id === s.id
       });
     }
@@ -627,11 +920,14 @@
       Wd.candle(ctx, c.x, c.y, c.s, c.lit, t);
     }
 
-    Wd.lantern(ctx, LANTERN.x, LANTERN.y, LANTERN.s, this.lantern.lit, t);
+    Wd.lantern(ctx, L.lantern.x, L.lantern.y, L.lantern.s, this.lantern.lit, t);
 
-    /* the keeper, facing her lantern */
-    Wd.keeper(ctx, KEEPER.x, KEEPER.y, {
-      face: 1, time: t, scale: 1,
+    /* the keeper, facing her lantern. Her scale comes from the layout too -
+       a keeper left at scale 1 in a portrait valley is a 30-unit figure
+       standing among 300-unit signposts, which reads as a bug rather than
+       as distance. */
+    Wd.keeper(ctx, L.keeper.x, L.keeper.y, {
+      face: L.lantern.x < L.keeper.x ? -1 : 1, time: t, scale: L.keeper.s,
       lit: 0.55 + this.night * 0.45
     });
 
@@ -646,7 +942,8 @@
 
   Game.prototype._dayCard = function (ctx) {
     var T = this.tally;
-    var x = 14, y = 12, w = 244, h = 82;
+    var hud = hudRect();
+    var x = hud.x + 14, y = hud.y + 12, w = 244, h = 82;
     EF.card(ctx, x, y, w, h, 0.9);
     EF.text(ctx, 'DAY ' + this.day + ' OF ' + this.days, x + 12, y + 19, 15,
       { align: 'left', weight: '700', color: P.get('candleGold'), halo: false });
@@ -669,19 +966,21 @@
 
     /* Below the day card, not across it: centred at y=40 this line ran
        straight through the card's own text. */
-    EF.text(ctx, hint, W * 0.5, 126, 17,
+    var hud = hudRect();
+    EF.text(ctx, hint, hud.cx, hud.y + 126, 17,
       { color: P.rgba('cream', 0.94), halo: P.rgba('vignette', 0.55) });
 
     if (this.duskReady()) {
       /* A ring around the lantern once it is the obvious next thing. */
       var pulse = 0.45 + 0.35 * Math.sin(this.t * 3);
+      var ln = this._layout().lantern, ls = ln.s || 1;
       ctx.save();
       ctx.setLineDash([7, 6]);
       ctx.lineDashOffset = -this.t * 14;
       ctx.strokeStyle = P.rgba('candleGold', pulse);
       ctx.lineWidth = 2.4;
       ctx.beginPath();
-      ctx.ellipse(LANTERN.x, LANTERN.y + 14, 34, 50, 0, 0, TAU);
+      ctx.ellipse(ln.x, ln.y + 14 * ls, 34 * ls, 50 * ls, 0, 0, TAU);
       ctx.stroke();
       ctx.restore();
     }
@@ -692,7 +991,7 @@
          a signpost they are about to tap is the small kind of wrong that
          makes a whole build feel like it was never opened on a phone. */
       EF.text(ctx, EF.touch ? 'tap a signpost   -   the pad below does the rest'
-                            : 'click a signpost   -   keys 1 2 3   -   M mutes', W * 0.5, H - 20, 12,
+                            : 'click a signpost   -   keys 1 2 3   -   M mutes', hud.cx, hud.bottom - 20, 12,
         { weight: '600', color: P.rgba('cream', 0.5), halo: false });
     }
   };
@@ -702,10 +1001,11 @@
     /* The corners, deliberately. The middle of the bottom edge belongs to the
        activity - the rake writes its "nothing here can be lost" line there,
        and all three lines were landing on the same pixels. */
-    EF.text(ctx, 'day ' + this.day + ' of ' + this.days, 14, H - 16, 12,
+    var hud = hudRect();
+    EF.text(ctx, 'day ' + this.day + ' of ' + this.days, hud.x + 14, hud.bottom - 16, 12,
       { align: 'left', weight: '700', color: P.rgba('cream', 0.55), halo: P.rgba('vignette', 0.4) });
     if (this.mode && this.mode.t < 8) {
-      EF.text(ctx, EF.touch ? 'BACK  -  to the valley' : 'ESC  -  back to the valley', W - 14, H - 16, 12,
+      EF.text(ctx, EF.touch ? 'BACK  -  to the valley' : 'ESC  -  back to the valley', hud.right - 14, hud.bottom - 16, 12,
         { align: 'right', weight: '600', color: P.rgba('cream', 0.45), halo: P.rgba('vignette', 0.4) });
     }
   };
@@ -818,8 +1118,11 @@
   };
 
   Game.prototype._mute = function (ctx) {
-    var x = 692, y = 24;
+    var m = muteAt();
+    var x = 0, y = 0;
     ctx.save();
+    ctx.translate(m.x, m.y);
+    if (m.s !== 1) ctx.scale(m.s, m.s);
     ctx.globalAlpha = 0.72;
     ctx.fillStyle = P.rgba('panel', 0.45);
     ctx.beginPath(); ctx.arc(x, y, 15, 0, TAU); ctx.fill();

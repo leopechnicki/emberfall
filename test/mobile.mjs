@@ -212,6 +212,14 @@ for (const [name, viewport, minPct] of [
   check(cov.pct >= minPct, name + ': the canvas alone fills the screen',
     cov.pct + '% (' + cov.cw + 'x' + cov.ch + ' of ' + cov.vw + 'x' + cov.vh + ', floor ' + minPct + '%)');
 
+  /* Tap a signpost wherever the CURRENT layout put it. */
+  async function tapSpot(pg, id) {
+    const sp = await pg.evaluate(
+      wanted => (window.__EMBERFALL.spots() || []).find(s => s.id === wanted) || null, id);
+    if (!sp) throw new Error('no signpost with id ' + id);
+    await tap(pg, sp.x, sp.y - (sp.h * 0.5) * (sp.s || 1));
+  }
+
   /* 4. the on-canvas controls exist and are thumb-sized */
   const pad = await padBoxes(page);
   check(!!pad, name + ': the on-canvas pad reports its geometry', pad ? 'yes' : 'no padGeom()');
@@ -227,8 +235,21 @@ for (const [name, viewport, minPct] of [
   const valley = await waitState(page, 'valley');
   check(valley.state === 'valley', name + ': a tap on the title opens the valley', valley.state);
 
-  /* 6. THE VINE SWING ON TOUCH - the activity Leo named by name */
-  await tap(page, 598, 414);
+  /* 6. THE VINE SWING ON TOUCH - the activity Leo named by name.
+
+     The sign's position is ASKED FOR, not hard-coded. It used to be a
+     literal tap at (598, 414) - the coordinates the sign has in the
+     authored 720x540 box - which silently became a tap on SQUIRREL STASH
+     the moment portrait started composing the valley for a tall screen.
+     The test went red on a layout change that was entirely correct, which
+     is the same "two hand-kept copies of where the sign is" bug the hit
+     test itself was fixed for. */
+  const groveSpot = await page.evaluate(
+    () => (window.__EMBERFALL.spots() || []).find(s => s.id === 'swing') || null);
+  check(!!groveSpot, name + ': the valley reports where THE HIGH GROVE sign is',
+    groveSpot ? `x=${Math.round(groveSpot.x)} y=${Math.round(groveSpot.y)} s=${(groveSpot.s || 1).toFixed(2)}` : 'no spots()');
+  /* the middle of the plank: the post hangs BELOW the origin, the board above it */
+  await tap(page, groveSpot.x, groveSpot.y - (groveSpot.h * 0.5) * (groveSpot.s || 1));
   const grove = await waitState(page, 'swing');
   check(grove.state === 'swing', name + ': tapping THE HIGH GROVE opens the vine swing', grove.state);
 
@@ -270,7 +291,7 @@ for (const [name, viewport, minPct] of [
     name + ': the on-canvas BACK control leaves the grove without a keyboard', backOut.state);
 
   /* 9. the positional activities are playable with a finger */
-  await tap(page, 118, 404);
+  await tapSpot(page, 'harvest');
   const orchard = await waitState(page, 'harvest');
   check(orchard.state === 'harvest', name + ': the orchard opens on touch', orchard.state);
   if (orchard.state === 'harvest') {
@@ -291,15 +312,23 @@ for (const [name, viewport, minPct] of [
         acceptance criterion names all three by name - harvest, rake, swing -
         so a suite that drives two of them and infers the third is exactly the
         kind of green run that gets caught on the phone instead of here. */
-  await tap(page, 300, 440);
+  await tapSpot(page, 'rake');
   const yard = await waitState(page, 'rake');
   check(yard.state === 'rake', name + ': the yard opens on touch', yard.state);
   if (yard.state === 'rake') {
     /* Converge on the pile ring so leaves actually bank, the same way
        verify.mjs sweeps on desktop. One stroke is enough to prove the finger
        reaches the rake; banking is what proves the stroke did work. */
-    for (const from of [{ x: 120, y: 500 }, { x: 260, y: 380 }, { x: 400, y: 495 }]) {
-      await drag(page, from, { x: 566, y: 424 });
+    const yg = yard.mode;
+    const pile = yg.pile, band = yg.yard;
+    /* Three strokes that start inside the CURRENT yard and converge on the
+       CURRENT pile. The old version dragged at the authored (566,424), which
+       in portrait is neither where the leaves are nor where the pile is, so
+       it swept clean grass and banked nothing. */
+    const lo = band.top + (band.bottom - band.top) * 0.25;
+    const hi = band.top + (band.bottom - band.top) * 0.80;
+    for (const from of [{ x: 120, y: hi }, { x: 260, y: lo }, { x: 400, y: hi }]) {
+      await drag(page, from, { x: pile.x, y: pile.y });
       await wait(120);
     }
     await wait(400);
@@ -315,7 +344,8 @@ for (const [name, viewport, minPct] of [
 
   /* 10. mute - drawn on the canvas since before this pass, still a plain tap */
   const mutedBefore = (await snap(page)).muted;
-  await tap(page, 692, 24);
+  const muteSpot = await page.evaluate(() => window.__EMBERFALL.muteSpot());
+  await tap(page, muteSpot.x, muteSpot.y);
   await wait(200);
   const mutedAfter = (await snap(page)).muted;
   check(mutedBefore !== mutedAfter, name + ': the on-canvas MUTE control toggles',

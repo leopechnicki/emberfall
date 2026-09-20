@@ -74,6 +74,10 @@
        device has an Esc key - game.js reads EF.touch to choose between
        'ESC - back to the valley' and 'BACK - to the valley'. */
     EF.touch = touch;
+    /* Portrait is the layout every scene branches on: each scene's layout()
+       picks its tall composition from it, and EF.hudRect() moves the chrome
+       to the screen's edges instead of the scene box's. */
+    EF.portrait = touch && !landscape;
     return landscape;
   }
 
@@ -110,6 +114,7 @@
          everywhere else (touch) the canvas is simply the whole viewport. */
       var f0 = Math.min(Math.max(1, r0.width) / W, Math.max(1, r0.height) / H);
       sizeCanvas(Math.round(W * f0), Math.round(H * f0));
+      publishPadTop();
       return;
     }
 
@@ -145,6 +150,7 @@
 
     sizeCanvas(availW, availH);
     computePad(landscape);
+    publishPadTop();
   }
 
   function num(v) { var n = parseFloat(v); return isFinite(n) ? n : 0; }
@@ -306,6 +312,17 @@
       };
       if (gutterCss < 44) padGeom = null;   // no honest room for a finger - drop the pad rather than crowd it
     }
+  }
+
+  /* The top of the strip the on-canvas pad owns, in logical units, published
+     for anything that has to keep OUT of it. The HUD is the caller that
+     matters: the day card and the hint line are chrome, they belong to the
+     screen rather than to the 720x540 scene box, and without this they were
+     drawn at y=12 and y=126 of a box whose top edge is 818 units above the
+     canvas - i.e. floating in the middle of the sky. null when there is no
+     pad (desktop), which is the signal to use the scene box unchanged. */
+  function publishPadTop() {
+    EF.padTopY = padGeom ? Math.min(padGeom.back.y, padGeom.action.y) : null;
   }
 
   function hitPad(x, y) {
@@ -474,6 +491,8 @@
     /* For tests: the pad's current geometry and a tap dispatched through the
        real hitPad()/onDown() decision, not a shortcut that skips it. */
     padGeom: function () { return padGeom; },
+    spots: function () { return game ? game.spots() : null; },
+    muteSpot: function () { return game ? game.muteSpot() : null; },
     tapClient: function (cx, cy) { onDown({ clientX: cx, clientY: cy, cancelable: false }); },
 
     /* Jump straight to a scene. For screenshots and for starting a test in

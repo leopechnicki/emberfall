@@ -32,7 +32,7 @@ const PNG_SIG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 /* ---------------------------------------------------------------- decode */
 
-function inflatePNG(file) {
+export function inflatePNG(file) {
   const buf = fs.readFileSync(file);
   if (!buf.subarray(0, 8).equals(PNG_SIG)) throw new Error(`${file}: not a PNG`);
 
@@ -73,7 +73,7 @@ function inflatePNG(file) {
 
 /* Undo the per-scanline PNG filters in place. Straight out of the spec; the
    only subtlety is that `a`/`c` reach back by BYTES PER PIXEL, not by one. */
-function unfilter({ width, height, channels, raw }) {
+export function unfilter({ width, height, channels, raw }) {
   const stride = width * channels;
   const out = Buffer.allocUnsafe(stride * height);
   let ip = 0;

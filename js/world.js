@@ -166,18 +166,28 @@
     ridge(ctx, w, h, hz + 10, 11, 303, P.get('hillNear'), rect);
   };
 
+  /* Bleed-aware: the ground runs to the edges of the CANVAS, not to the edges
+     of the 720x540 scene box. Without this the slab stopped dead partway
+     across a phone in landscape and left two vertical seams of sky running
+     down to the bottom of the screen - visible in
+     test/screenshots/mobile_landscape.png before this pass. The colour ramp is
+     still anchored to the scene box, so day/dusk/night are unchanged. */
   W.ground = function (ctx, w, h, y) {
+    var r = EF.fullRect(w, h);
     var g = ctx.createLinearGradient(0, y, 0, h);
     g.addColorStop(0, P.get('ground'));
     g.addColorStop(1, P.get('groundDark'));
     ctx.fillStyle = g;
-    ctx.fillRect(0, y, w, h - y);
+    ctx.fillRect(r.x, y, r.w, r.bottom - y);
 
-    /* Scattered moss tufts so the ground is not a flat slab. */
+    /* Scattered moss tufts so the ground is not a flat slab. Density per unit
+       of area, so a taller portrait yard is not a bald one. */
     var rnd = EF.rng(555);
-    for (var i = 0; i < 90; i++) {
-      var x = rnd() * w;
-      var yy = y + rnd() * (h - y);
+    var area = Math.max(1, r.w * (r.bottom - y));
+    var n = Math.round(EF.clamp(90 * area / (w * Math.max(1, h - y)), 90, 900));
+    for (var i = 0; i < n; i++) {
+      var x = r.x + rnd() * r.w;
+      var yy = y + rnd() * (r.bottom - y);
       var s = 2 + rnd() * 4;
       ctx.fillStyle = P.rgba(rnd() > 0.5 ? 'leafMoss' : 'mossDeep', 0.35);
       ctx.beginPath();
@@ -186,21 +196,83 @@
     }
   };
 
-  /* A winding golden track - this is where the candles go at dusk. */
-  W.path = function (ctx, w, h, y) {
+  /* A winding golden track - this is where the candles go at dusk.
+   *
+   * `spec` is the portrait composition's way in: a list of points to run the
+   * track through plus the width at each end, so the same primitive draws the
+   * short left-to-right curve the 720x540 valley was authored with AND the
+   * long tapered track that climbs a phone screen from the player's feet to
+   * the horizon. Called without it, the geometry is byte-for-byte what it was.
+   *
+   *   spec.pts   [[x,y], ...] near end first, horizon last
+   *   spec.w0    track width at the near end
+   *   spec.w1    track width at the horizon
+   *
+   * Perspective is the whole reason for the taper: a constant-width ribbon
+   * running that far up a portrait screen reads as a wall, not as a path. */
+  W.path = function (ctx, w, h, y, spec) {
     ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(-20, h + 10);
-    ctx.quadraticCurveTo(w * 0.28, y + 54, w * 0.52, y + 16);
-    ctx.quadraticCurveTo(w * 0.74, y - 14, w + 20, y - 4);
-    ctx.lineWidth = 46;
-    ctx.lineCap = 'round';
-    ctx.strokeStyle = P.get('pathEdge');
-    ctx.stroke();
-    ctx.lineWidth = 34;
-    ctx.strokeStyle = P.get('path');
-    ctx.stroke();
+    if (!spec) {
+      ctx.beginPath();
+      ctx.moveTo(-20, h + 10);
+      ctx.quadraticCurveTo(w * 0.28, y + 54, w * 0.52, y + 16);
+      ctx.quadraticCurveTo(w * 0.74, y - 14, w + 20, y - 4);
+      ctx.lineWidth = 46;
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = P.get('pathEdge');
+      ctx.stroke();
+      ctx.lineWidth = 34;
+      ctx.strokeStyle = P.get('path');
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+
+    var pts = W.samplePath(spec.pts, 42);
+    ribbon(ctx, pts, spec.w0 + 12, spec.w1 + 6, P.get('pathEdge'));
+    ribbon(ctx, pts, spec.w0, spec.w1, P.get('path'));
     ctx.restore();
+  };
+
+  /* A tapered ribbon through sampled centre points: one filled polygon, left
+     edge down and right edge back, so there is no seam between segments. */
+  function ribbon(ctx, pts, w0, w1, fill) {
+    var i, n = pts.length;
+    ctx.beginPath();
+    for (i = 0; i < n; i++) {
+      var hw = (w0 + (w1 - w0) * (i / (n - 1))) * 0.5;
+      ctx.lineTo(pts[i][0] - hw, pts[i][1]);
+    }
+    for (i = n - 1; i >= 0; i--) {
+      var hw2 = (w0 + (w1 - w0) * (i / (n - 1))) * 0.5;
+      ctx.lineTo(pts[i][0] + hw2, pts[i][1]);
+    }
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+  }
+
+  /* Catmull-Rom through the control points, sampled evenly. Exposed because
+     the valley puts its signposts, its candles and its keeper ON the path -
+     and a signpost that floats a few units off the track it names is exactly
+     the kind of small wrong that makes a scene look assembled. */
+  W.samplePath = function (pts, steps) {
+    var out = [];
+    var n = pts.length;
+    var at = function (i) { return pts[EF.clamp(i, 0, n - 1) | 0]; };
+    for (var seg = 0; seg < n - 1; seg++) {
+      var p0 = at(seg - 1), p1 = at(seg), p2 = at(seg + 1), p3 = at(seg + 2);
+      var per = Math.max(2, Math.round(steps / (n - 1)));
+      for (var s = 0; s < per; s++) {
+        var t = s / per, t2 = t * t, t3 = t2 * t;
+        out.push([
+          0.5 * ((2 * p1[0]) + (-p0[0] + p2[0]) * t + (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * t2 + (-p0[0] + 3 * p1[0] - 3 * p2[0] + p3[0]) * t3),
+          0.5 * ((2 * p1[1]) + (-p0[1] + p2[1]) * t + (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * t2 + (-p0[1] + 3 * p1[1] - 3 * p2[1] + p3[1]) * t3)
+        ]);
+      }
+    }
+    out.push([pts[n - 1][0], pts[n - 1][1]]);
+    return out;
   };
 
   /* -------------------------------------------------------------- tree */
@@ -273,12 +345,16 @@
   };
 
   /* Leaf litter at the foot of everything. Static, seeded. */
+  /* Bleed-aware in x for the same reason W.ground is: leaves that stop at the
+     scene edge draw the seam they were meant to hide. Density is per unit of
+     area so a taller portrait ground is covered as densely as a short one. */
   W.litter = function (ctx, w, y, h, seed, density) {
     var rnd = EF.rng(seed || 909);
     var cols = ['leafRusset', 'leafOrange', 'leafAmber', 'leafGold', 'leafOchre'];
-    var n = density || 120;
+    var r = EF.fullRect(w);
+    var n = Math.round((density || 120) * (r.w / w));
     for (var i = 0; i < n; i++) {
-      var x = rnd() * w;
+      var x = r.x + rnd() * r.w;
       var yy = y + rnd() * h;
       var s = 3 + rnd() * 4;
       ctx.save();
@@ -488,6 +564,13 @@
 
     ctx.save();
     ctx.translate(x, y + bob);
+    /* One scale for the whole sign - plank, post, grain AND lettering. The
+       label is the reason this is a transform and not a bigger w/h: a phone
+       that scales the board but leaves 14-unit type on it gets a bigger sign
+       nobody can read. Signs are thumb targets, so game.js sizes them through
+       EF.px() and hit-tests the same s (js/game.js _hit). */
+    var s = o.s || 1;
+    if (s !== 1) ctx.scale(s, s);
 
     /* post */
     ctx.strokeStyle = P.get('barkDark');
