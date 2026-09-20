@@ -119,7 +119,19 @@ const RELEASE_DEG = 12;
    (Swing.pointer -> action() ignores coordinates), so every tap is a real
    trusted mouse click on the canvas and nothing is synthesised.
    Drives until `untilProgress` (or the goal) and returns real numbers. */
+/* The grove is a REAL-TIME simulation and this budget is wall-clock, so it
+   measures the machine as much as the game. Locally the full crossing takes
+   about 16 seconds; on a shared CI runner with no GPU the same crossing ran
+   past 150 and the suite called a perfectly good build broken - one run of
+   the pair failed while the other passed on the identical commit, which is
+   the signature of a timing budget and not of a bug.
+
+   So the budget scales on CI. The ASSERTION is untouched: still 100% of the
+   grove crossed, still zero falls. Only the patience changes. */
+const SLOW = process.env.CI ? 5 : 1;
+
 async function driveSwing(page, b, { untilProgress = 1, budgetMs = 90000 } = {}) {
+  budgetMs *= SLOW;
   const t0 = Date.now();
   let last = { progress: 0, reached: false, hooks: 0, apples: 0 };
   let releases = 0, stuck = 0, lastBest = 0;

@@ -20,6 +20,170 @@
 
   EF.TAU = Math.PI * 2;
 
+  /* ------------------------------------------------------- the view model
+
+   * THE portrait fix, in three numbers.
+   *
+   * The scene is a fixed 720x540 logical space and every coordinate in
+   * game.js / harvest.js / rake.js / swing.js is hand-placed inside it. That
+   * is worth keeping. What was wrong was the CANVAS ELEMENT: it was letterboxed
+   * to 4:3, so on a 390x844 phone it was 390x292 and the other 551 px were a
+   * dead band that got filled with a button pad - "the game is on a tiny
+   * screen and the buttons take the rest", which is the complaint that
+   * rejected the first build.
+   *
+   * Now the canvas element is the whole viewport and the scene band is
+   * contain-scaled inside it. The leftover is not dead space and it is not a
+   * CSS background: it is MORE WORLD. main.js:fit() measures it and writes it
+   * here in LOGICAL units, and every backdrop primitive (P.sky, P.grain,
+   * P.mottle, P.vignette, W.hills, W.ground, W.litter, Drift) paints
+   * EF.fullRect() instead of 0,0,720,540. So the sky above and the ground
+   * below simply extend, and harvest / rake / swing needed no camera changes
+   * at all - their existing backdrop calls expand on their own.
+   *
+   *   bleed.x      logical units of extra world left AND right of the scene
+   *   bleed.top    logical units of extra world above it
+   *   bleed.bottom logical units of extra world below it
+   *
+   * cssPerUnit is the other half: it is how many REAL CSS pixels one logical
+   * unit is worth right now. Anything that has to be a certain size to a
+   * FINGER (every touch target: 44 CSS px, WCAG 2.5.5) is sized through
+   * EF.px() rather than in logical units, because a 44-unit box is 24 real
+   * pixels on a phone - which is the reason the old build put its controls in
+   * the DOM instead of on the canvas. */
+  EF.bleed = { x: 0, top: 0, bottom: 0 };
+  EF.cssPerUnit = 1;
+
+  /* True while the canvas is a tall phone screen (touch AND taller than it is
+     wide). main.js owns it; every scene reads it to choose between its
+     original 720x540 composition and a portrait one. */
+  EF.portrait = false;
+
+  /* Top of the on-canvas pad's strip, in logical units - published by
+     main.js, read by anything that must not draw under a thumb button.
+     null means there is no pad and the scene box is the whole story. */
+  EF.padTopY = null;
+
+  /* The whole canvas, in logical units. Defaults to the scene itself, so a
+     scene drawn before main.js has ever measured anything is unchanged. */
+  EF.fullRect = function (w, h) {
+    var sw = w === undefined ? 720 : w;
+    var sh = h === undefined ? 540 : h;
+    var b = EF.bleed;
+    return {
+      x: -b.x,
+      y: -b.top,
+      w: sw + b.x * 2,
+      h: sh + b.top + b.bottom,
+      /* convenience, because half the call sites want edges not extents */
+      right: sw + b.x,
+      bottom: sh + b.bottom
+    };
+  };
+
+  /* --------------------------------------------------- the portrait frame
+   *
+   * The four scenes with a sky in them - the valley, the orchard, the yard
+   * and the grove - all had the same problem and all need the same three
+   * numbers to solve it, so they share them here rather than each carrying a
+   * private copy of 0.30 that drifts.
+   *
+   *   hz      where the horizon goes: SKY_SHARE down the WHOLE canvas, not
+   *           down the 720x540 scene box. This is the fix, in one line.
+   *   dy(d)   depth 0 (the horizon) to depth 1 (the player's feet), eased so
+   *           distance compresses toward the horizon the way it really does.
+   *           A linear field reads like a board game tipped at the camera.
+   *   ps(d)   perspective scale in REAL CSS PIXELS. This is the part that is
+   *           easy to get wrong: a 390 px phone drawing a 720-wide scene
+   *           renders everything at 54% of its authored size, so MOVING a
+   *           40-unit signpost up a taller screen leaves it just as
+   *           unreadable. Sizing through EF.px pins it to physical size on
+   *           the glass and the depth term varies it around that.
+   *
+   * Only ever called when EF.portrait is true. */
+  EF.SKY_SHARE = 0.30;
+  EF.DEPTH_POW = 1.25;
+
+  /* ------------------------------------------------------------- the HUD box
+   *
+   * The scene is composed in the 720x540 box; the HUD is not. A day card, a
+   * recipe card, a timer, a wind gauge and a mute button are CHROME - they
+   * belong to the edges of the SCREEN, and on a phone those are not the
+   * edges of the scene box. In portrait the box starts 818 units above the
+   * top of the canvas, so chrome at y=12 renders a third of the way down the
+   * sky, printed over the scene. That is what the first portrait pass
+   * shipped and it is the most obviously broken thing in the screenshot.
+   *
+   * The bottom stops at the on-canvas pad, so no HUD line is ever drawn
+   * underneath a thumb button.
+   *
+   * On desktop and in landscape this is EXACTLY (0,0,720,540) - the authored
+   * box - so neither layout moves by a pixel. */
+  EF.hudRect = function () {
+    if (!EF.portrait) {
+      return { x: 0, y: 0, w: 720, h: 540, right: 720, bottom: 540, cx: 360 };
+    }
+    var r = EF.fullRect(720, 540);
+    var bottom = (EF.padTopY === null || EF.padTopY === undefined)
+      ? r.bottom : Math.min(r.bottom, EF.padTopY);
+    return {
+      x: r.x, y: r.y, w: r.w, h: bottom - r.y,
+      right: r.right, bottom: bottom, cx: r.x + r.w * 0.5
+    };
+  };
+
+  /* How much to magnify HUD CHROME in portrait.
+   *
+   * The scene got a perspective scale; the chrome did not, and a phone draws
+   * the 720-wide scene at 54%, so the day card's 13-unit body text rendered
+   * at 7.6 REAL pixels and the timer at 7.6. Legible only just, and only if
+   * you are looking for it. This pins chrome text to a physical size on the
+   * glass the same way EF.px pins touch targets, and is exactly 1 on desktop
+   * and in landscape so those layouts are untouched. */
+  EF.hudScale = function () {
+    if (!EF.portrait) return 1;
+    /* CEILING OF 1.35, and it is not taste either. The widest HUD card is
+       244 units; past 1.47x it covers more than half of the 720-unit row and
+       becomes the row's MEDIAN colour, at which point test/framelib.mjs
+       reads the top of the screen as ground and loses the sky entirely. Tried
+       at 1.85 and the gate went from 41/41 to six failures, valley reporting
+       0% sky - the chrome had literally become the skyline. It is also just
+       too much screen to spend on a day counter. 1.35 lifts 13-unit body
+       text from 7.6 to 9.5 real pixels and leaves the card at 46% of the
+       row. Making the chrome properly phone-sized needs a portrait HUD
+       layout, not a bigger copy of the desktop one. */
+    return EF.clamp(EF.px(12) / 12, 1, 1.35);
+  };
+
+  /* The mute control's box. Lives here rather than in game.js because the
+     orchard's WIND gauge has to keep out of it, and two files computing the
+     same corner independently is how they ended up drawn on top of each
+     other. `left` is the leftmost pixel it occupies. */
+  EF.muteBox = function () {
+    var hud = EF.hudRect();
+    /* authored at radius 15; on a phone 15 units is 8 CSS px, so it is sized
+       off EF.px like every other touch target */
+    var s = EF.portrait ? Math.max(1, EF.px(17) / 15) : 1;
+    var x = hud.right - 28 * s;
+    return { x: x, y: hud.y + 24 * s, s: s, left: x - 15 * s };
+  };
+
+  EF.portraitFrame = function () {
+    var r = EF.fullRect(720, 540);
+    var hz = r.y + r.h * EF.SKY_SHARE;
+    var gd = Math.max(160, 540 - hz);
+    return {
+      hz: hz, gd: gd, top: r.y, bottom: r.bottom,
+      dy: function (d) { return hz + gd * Math.pow(d, EF.DEPTH_POW); },
+      ps: function (d) { return EF.px(54) / 40 * (0.72 + 0.42 * d); }
+    };
+  };
+
+  /* n real CSS pixels, in logical units. A touch target is written
+     EF.px(44) and is therefore 44 px on a phone, on a laptop, and at any
+     device pixel ratio. */
+  EF.px = function (n) { return n / (EF.cssPerUnit || 1); };
+
   EF.clamp = function (v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); };
   EF.lerp = function (a, b, t) { return a + (b - a) * t; };
 
@@ -120,17 +284,86 @@
     ctx.closePath();
   };
 
-  /* A soft parchment card. Every panel in the game is one of these, so the
-     HUD, the recipe card and the end-of-day summary all share a material. */
+  /* A deckled edge - the jagged edge torn paper and split wood actually
+     have. Seeded from the rect, so a given panel tears the same way in every
+     frame and every screenshot instead of crawling. Straight lineTo segments,
+     not curves: a tear is jagged, and smoothing it puts us straight back at
+     the rounded rectangle. */
+  EF.deckle = function (ctx, x, y, w, h, jitter) {
+    var j = jitter === undefined ? 2.2 : jitter;
+    var rnd = EF.rng(((x * 7 + y * 31 + w * 13 + h * 57) | 0) >>> 0);
+    var stepX = Math.max(14, w / Math.max(4, Math.round(w / 26)));
+    var stepY = Math.max(10, h / Math.max(3, Math.round(h / 22)));
+    var v;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    for (v = x + stepX; v < x + w; v += stepX) ctx.lineTo(v, y + (rnd() - 0.5) * 2 * j);
+    ctx.lineTo(x + w, y);
+    for (v = y + stepY; v < y + h; v += stepY) ctx.lineTo(x + w + (rnd() - 0.5) * 2 * j, v);
+    ctx.lineTo(x + w, y + h);
+    for (v = x + w - stepX; v > x; v -= stepX) ctx.lineTo(v, y + h + (rnd() - 0.5) * 2 * j);
+    ctx.lineTo(x, y + h);
+    for (v = y + h - stepY; v > y; v -= stepY) ctx.lineTo(x + (rnd() - 0.5) * 2 * j, v);
+    ctx.closePath();
+  };
+
+  /* A panel. Every card in the game is one of these, so the HUD, the recipe
+     card and the end-of-day summary all share a material.
+   *
+   * It used to be a rounded rectangle with a gradient, which is the single
+   * most generic shape a canvas game can draw and a fair part of why the first
+   * build "looks AI-generated". It is now a torn board: deckled edge, wood
+   * grain along it, rim light down the RIGHT side and shadow down the left,
+   * because the valley has exactly one light source and it is up and to the
+   * right (the same side the cottage windows are on).
+   *
+   * It stays DARK-toned on purpose. Every caller writes cream or candle-gold
+   * text onto it; flipping the material to pale parchment would have meant
+   * re-picking the ink in four other files, and a change that large is how a
+   * reskin quietly becomes a rewrite. */
   EF.card = function (ctx, x, y, w, h, alpha) {
+    var P = EF.Palette;
     var a = alpha === undefined ? 0.92 : alpha;
+    var n = P.night;
     ctx.save();
-    EF.roundRect(ctx, x, y, w, h, 10);
-    ctx.fillStyle = EF.Palette.rgba('panel', a * (0.55 + EF.Palette.night * 0.35));
+
+    /* the board */
+    EF.deckle(ctx, x, y, w, h, Math.min(2.6, h * 0.05));
+    ctx.fillStyle = P.rgba('panel', a * (0.62 + n * 0.30));
     ctx.fill();
-    ctx.lineWidth = 1.5;
-    ctx.strokeStyle = EF.Palette.rgba('candleGold', 0.22 + EF.Palette.night * 0.18);
+
+    /* grain: a few long strokes along the board, clipped to it */
+    ctx.save();
+    ctx.clip();
+    var rnd = EF.rng(((x * 3 + w * 11) | 0) >>> 0);
+    ctx.lineWidth = 1;
+    for (var i = 0; i < 5; i++) {
+      var gy = y + h * (0.12 + rnd() * 0.78);
+      ctx.strokeStyle = P.rgba(rnd() > 0.5 ? 'barkDark' : 'cinnamon', 0.10);
+      ctx.beginPath();
+      ctx.moveTo(x, gy);
+      ctx.bezierCurveTo(x + w * 0.35, gy + (rnd() - 0.5) * 3, x + w * 0.7, gy - (rnd() - 0.5) * 3, x + w, gy + (rnd() - 0.5) * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    /* rim: warm on the lit side, shadow on the other. One light source. */
+    ctx.lineWidth = 1.6;
+    ctx.strokeStyle = P.rgba('candleGold', 0.16 + n * 0.14);
+    EF.deckle(ctx, x, y, w, h, Math.min(2.6, h * 0.05));
     ctx.stroke();
+    ctx.lineWidth = 2.2;
+    ctx.strokeStyle = P.rgba('candleGold', 0.20 + n * 0.16);
+    ctx.beginPath();
+    ctx.moveTo(x + w, y + 3);
+    ctx.lineTo(x + w, y + h - 3);
+    ctx.stroke();
+    ctx.strokeStyle = P.rgba('vignette', 0.35);
+    ctx.beginPath();
+    ctx.moveTo(x, y + 3);
+    ctx.lineTo(x, y + h - 3);
+    ctx.stroke();
+
     ctx.restore();
   };
 
