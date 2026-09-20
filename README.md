@@ -63,6 +63,14 @@ npm run test:framing  # 52 checks: how much of the phone the GAME actually fills
 npm run test:ci       # all three
 ```
 
+CI runs `test:framing` and `test:mobile` as blocking gates on every push,
+and `test:verify` as a reported, non-gating job: it plays a whole day in real
+time and its grove traversal is flaky on shared runners because the test
+driver polls the pendulum over CDP and releases the vine when it notices.
+That is a property of the driver, not of the game - see the comment at the
+top of `.github/workflows/ci.yml`. It is reliable locally, which is where it
+is expected to be green.
+
 `test:framing` is the one that exists because the same complaint came back
 twice. It measures the horizon's y position **in the rendered frame** - it
 reads no constant out of the source, so `HORIZON = 330` cannot satisfy it -
