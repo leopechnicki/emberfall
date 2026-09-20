@@ -614,18 +614,15 @@
   /* Drawn by _mute from the same two numbers, for the same reason the
      signposts are: a control drawn in the screen's corner and hit-tested in
      the scene box's corner is a mute button that does nothing on a phone. */
-  function muteAt() {
-    var hud = hudRect();
-    /* The glyph is authored at radius 15. On desktop s is exactly 1 and this
-       returns the original (692, 24). On a phone 15 units is 8 CSS px, which
-       is neither readable nor hittable, so it is sized off EF.px like every
-       other touch target. */
-    var s = EF.portrait ? Math.max(1, EF.px(17) / 15) : 1;
-    return { x: hud.right - 28 * s, y: hud.y + 24 * s, s: s };
-  }
+  function muteAt() { return EF.muteBox(); }
   function inMute(x, y) {
     var m = muteAt();
-    return EF.hypot(x - m.x, y - m.y) < Math.max(20, EF.px(22));
+    /* Exactly the authored 20 on desktop and in landscape. Widening it to
+       max(20, EF.px(22)) unconditionally moved the hit box on the signed-off
+       builds too - EF.px(22) is 22 when cssPerUnit is 1 - and made the
+       desktop target depend on a value main.js does not reset on that path. */
+    var r = EF.portrait ? Math.max(20, EF.px(22)) : 20;
+    return EF.hypot(x - m.x, y - m.y) < r;
   }
 
   Game.prototype.pointerDown = function (x, y) {
@@ -764,6 +761,7 @@
      the screen's corner in portrait and a test aiming at the scene box's
      corner was tapping empty sky. */
   Game.prototype.muteSpot = function () { return muteAt(); };
+  Game.prototype.titleCard = function () { return titleCard(); };
 
   Game.prototype.pause = function () { this.paused = true; };
   Game.prototype.resume = function () { this.paused = false; };
@@ -942,8 +940,14 @@
 
   Game.prototype._dayCard = function (ctx) {
     var T = this.tally;
-    var hud = hudRect();
-    var x = hud.x + 14, y = hud.y + 12, w = 244, h = 82;
+    var hud = hudRect(), k = EF.hudScale();
+    /* Anchored to the screen's top-left corner and scaled about it, so every
+       number below is the authored one and desktop (k=1, hud at 0,0) is
+       byte-identical. */
+    ctx.save();
+    ctx.translate(hud.x, hud.y);
+    if (k !== 1) ctx.scale(k, k);
+    var x = 14, y = 12, w = 244, h = 82;
     EF.card(ctx, x, y, w, h, 0.9);
     EF.text(ctx, 'DAY ' + this.day + ' OF ' + this.days, x + 12, y + 19, 15,
       { align: 'left', weight: '700', color: P.get('candleGold'), halo: false });
@@ -954,6 +958,7 @@
       x + 12, y + 44, 13, { align: 'left', weight: '600', color: P.rgba('cream', 0.88), halo: false });
     EF.text(ctx, 'wax ' + T.wax + '    kindling ' + T.kindling + '    candles ' + T.candles,
       x + 12, y + 65, 13, { align: 'left', weight: '600', color: P.rgba('candleGold', 0.92), halo: false });
+    ctx.restore();
   };
 
   Game.prototype._valleyHud = function (ctx) {
@@ -1029,9 +1034,10 @@
       sub = 'tap to finish day ' + this.day;
     }
 
-    EF.text(ctx, line, W * 0.5, 128, 26,
+    var dh = hudRect();
+    EF.text(ctx, line, dh.cx, dh.y + 128, 26,
       { color: P.get('candleGold'), halo: P.rgba('vignette', 0.6) });
-    EF.text(ctx, sub, W * 0.5, 156, 14,
+    EF.text(ctx, sub, dh.cx, dh.y + 156, 14,
       { weight: '600', color: P.rgba('cream', 0.8), halo: P.rgba('vignette', 0.5) });
 
     /* Show where the wax can go, but only while there is wax to spend. */
@@ -1053,20 +1059,35 @@
     }
   };
 
+  /* The title card's rect, in one place, so the draw and the overlap test in
+     test/framing.mjs cannot disagree about where it is. */
+  function titleCard() {
+    var hud = hudRect();
+    return { x: hud.cx - 246, y: hud.y + 52, w: 492, h: 132 };
+  }
+
   Game.prototype._title = function (ctx) {
     var a = 0.55 + 0.45 * Math.sin(this.t * 2.2);
-    EF.card(ctx, W * 0.5 - 246, 52, 492, 132, 0.72);
-    EF.text(ctx, 'EMBERFALL', W * 0.5, 100, 56,
+    /* The title is CHROME, like the day card and the mute button, so it
+       belongs to the screen. Drawn in the scene box it landed 56% of the way
+       down a phone - directly on top of THE HIGH GROVE signpost, with the
+       game's own name and the sign's label overprinting each other on the
+       first screen Klaudia sees. On desktop hudRect() is (0,0,720,540) and
+       every number below is the authored one. */
+    var hud = hudRect();
+    var c = titleCard();
+    EF.card(ctx, c.x, c.y, c.w, c.h, 0.72);
+    EF.text(ctx, 'EMBERFALL', hud.cx, hud.y + 100, 56,
       { color: P.get('candleGold'), halo: P.rgba('vignette', 0.65) });
-    EF.text(ctx, 'thirty days of autumn  -  and one lantern to keep', W * 0.5, 142, 16,
+    EF.text(ctx, 'thirty days of autumn  -  and one lantern to keep', hud.cx, hud.y + 142, 16,
       { weight: '600', color: P.rgba('cream', 0.88), halo: P.rgba('vignette', 0.5) });
-    EF.text(ctx, 'gather by day  -  light the paths by night', W * 0.5, 166, 13,
+    EF.text(ctx, 'gather by day  -  light the paths by night', hud.cx, hud.y + 166, 13,
       { weight: '600', color: P.rgba('cream', 0.62), halo: false });
 
-    EF.text(ctx, 'tap anywhere to begin day 1', W * 0.5, H - 62, 18,
+    EF.text(ctx, 'tap anywhere to begin day 1', hud.cx, hud.bottom - 62, 18,
       { color: P.rgba('candleGold', a), halo: P.rgba('vignette', 0.55) });
     if (this.bestLanterns > 0) {
-      EF.text(ctx, 'best evening so far: ' + this.bestLanterns + ' flames lit', W * 0.5, H - 34, 12,
+      EF.text(ctx, 'best evening so far: ' + this.bestLanterns + ' flames lit', hud.cx, hud.bottom - 34, 12,
         { weight: '600', color: P.rgba('cream', 0.55), halo: false });
     }
   };
@@ -1077,14 +1098,18 @@
     ctx.fillStyle = P.rgba('vignette', 0.42);
     ctx.fillRect(rv.x, rv.y, rv.w, rv.h);
 
-    var cw = 432, ch = 340, x = (W - cw) * 0.5, y = (H - ch) * 0.5 - 8;
+    /* A modal belongs in the middle of the screen. Centred on the scene box
+       it sat two thirds of the way down a phone. On desktop hudRect() is the
+       scene box, so x and y below are the authored numbers exactly. */
+    var sh = hudRect();
+    var cw = 432, ch = 340, x = sh.cx - cw * 0.5, y = sh.y + (sh.h - ch) * 0.5 - 8;
     EF.card(ctx, x, y, cw, ch, 0.95);
 
-    EF.text(ctx, 'DAY ' + this.day + ' OF ' + this.days, W * 0.5, y + 34, 24,
+    EF.text(ctx, 'DAY ' + this.day + ' OF ' + this.days, sh.cx, y + 34, 24,
       { color: P.get('candleGold'), halo: P.rgba('vignette', 0.6) });
     EF.text(ctx, T.lantern ? 'the lantern is lit and the valley is warm'
       : 'the valley waits for its light',
-      W * 0.5, y + 60, 13, { weight: '600', color: P.rgba('cream', 0.72), halo: false });
+      sh.cx, y + 60, 13, { weight: '600', color: P.rgba('cream', 0.72), halo: false });
 
     var rows = [
       ['orchard', T.recipe ? (T.recipe + '  x' + T.pies) : 'no recipe finished'],
@@ -1110,10 +1135,10 @@
       ry += 23;
     }
 
-    EF.text(ctx, (this.days - this.day) + ' days to the harvest festival', W * 0.5, y + ch - 44, 14,
+    EF.text(ctx, (this.days - this.day) + ' days to the harvest festival', sh.cx, y + ch - 44, 14,
       { weight: '700', color: P.rgba('candleGold', 0.9), halo: false });
     var a = 0.45 + 0.4 * Math.sin(this.t * 2.4);
-    EF.text(ctx, 'tap to return to the title', W * 0.5, y + ch - 22, 12,
+    EF.text(ctx, 'tap to return to the title', sh.cx, y + ch - 22, 12,
       { weight: '600', color: P.rgba('cream', a), halo: false });
   };
 
@@ -1183,6 +1208,11 @@
   Game.SPOTS = SPOTS;
   Game.CANDLE_SPOTS = CANDLE_SPOTS;
   Game.LANTERN = LANTERN;
+  /* Exposed for the flat-constants gate in test/framing.mjs. Six changes to
+     the signed-off desktop and landscape builds shipped inside a "not a
+     pixel" claim because nothing asserted the flat branch; this is what
+     makes that assertable. */
+  Game.valleyLayout = valleyLayout;
   EF.Game = Game;
 
 }(window));

@@ -104,6 +104,10 @@
        off. */
     if (!touch) {
       EF.bleed = { x: 0, top: 0, bottom: 0 };
+      /* Reset explicitly. Desktop never assigned it, so a window that was
+         touch a moment ago (devtools emulation, a hybrid laptop) left a stale
+         scale behind for every EF.px() caller on the desktop path. */
+      EF.cssPerUnit = 1;
       padGeom = null;
       stage.style.width = '';
       stage.style.height = '';
@@ -493,6 +497,7 @@
     padGeom: function () { return padGeom; },
     spots: function () { return game ? game.spots() : null; },
     muteSpot: function () { return game ? game.muteSpot() : null; },
+    titleCard: function () { return game ? game.titleCard() : null; },
     tapClient: function (cx, cy) { onDown({ clientX: cx, clientY: cy, cancelable: false }); },
 
     /* Jump straight to a scene. For screenshots and for starting a test in

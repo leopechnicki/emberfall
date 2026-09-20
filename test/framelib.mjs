@@ -141,8 +141,27 @@ function rowMedianRGB(img) {
  * comfortably below the hills, which is the widest margin available.
  *
  * The reference is taken from THIS frame's own top rows rather than
- * hard-coded, so the test keeps working when the palette changes - at dusk
- * the sky is plum and the ground is nearly black, and both move together. */
+ * hard-coded, so it tracks the palette rather than assuming daylight
+ * constants.
+ *
+ * MEASURED LIMIT, stated honestly because an earlier version of this comment
+ * claimed the opposite and was wrong: this detector is only trustworthy on a
+ * LIT frame. Driven to night=1 it reported 0.0% sky on a frame with an
+ * obvious sky band and a moon in it - a clean fail-OPEN, which on a gate is
+ * the worst possible direction. Two things break together in the dark:
+ *
+ *   - EDGE_STEP is an ABSOLUTE luminance step. On a near-black sky (luma ~20)
+ *     the film grain and the drifting leaves clear 7 easily, so 573 of 844
+ *     rows were marked solid on edges alone and the block grew to the top.
+ *     A step of 7 is 3% of a daylight sky and 35% of a night one.
+ *   - The far ground goes almost as dark as the sky, so the colour term
+ *     cannot separate them either (night: sky 1-47, distant ground 20-47).
+ *
+ * Neither signal survives, so this does not try to measure a dark frame. It
+ * DETECTS that it cannot and says so (`measurable: false`), and the gate
+ * turns that into a failure rather than a free pass. The composition being
+ * measured is identical at night anyway - the layout maths does not consult
+ * the palette - so measuring the lit frame measures the geometry. */
 function skyReference(meds, height) {
   const n = Math.max(3, Math.round(height * 0.08));
   const pick = c => {
@@ -196,6 +215,13 @@ export function findHorizon(img) {
 
 /* The whole measurement, as percentages of screen height that sum to 100.
  *
+ * `measurable` is false when the result cannot be believed. Today that is a
+ * horizon of 0: content growing all the way to the top edge. On a scene with
+ * a sky in it that never means "the sky band is zero pixels tall", it means
+ * the detector lost the sky - which is exactly what a dark frame does to it.
+ * Callers MUST treat measurable:false as a failure. Reporting skyPct 0 /
+ * scenePct 91 from that state is how a gate passes a build nobody measured.
+ *
  *   skyPct    nothing but sky
  *   scenePct  horizon -> top of the touch pad: the band the GAME lives in
  *   padPct    the on-canvas BACK/ACTION strip
@@ -210,8 +236,11 @@ export function measureFrame(file, padTopPx) {
   const padTop = (padTopPx === undefined || padTopPx === null)
     ? H : Math.max(0, Math.min(H, Math.round(padTopPx)));
 
+  const measurable = horizon > 0;
   return {
     file, width: img.width, height: H,
+    measurable,
+    why: measurable ? '' : 'content reaches the top row: the sky band was not found (frame too dark to measure?)',
     horizonPx: horizon,
     padTopPx: padTop,
     skyPct: +(horizon / H * 100).toFixed(1),

@@ -132,6 +132,42 @@
     };
   };
 
+  /* How much to magnify HUD CHROME in portrait.
+   *
+   * The scene got a perspective scale; the chrome did not, and a phone draws
+   * the 720-wide scene at 54%, so the day card's 13-unit body text rendered
+   * at 7.6 REAL pixels and the timer at 7.6. Legible only just, and only if
+   * you are looking for it. This pins chrome text to a physical size on the
+   * glass the same way EF.px pins touch targets, and is exactly 1 on desktop
+   * and in landscape so those layouts are untouched. */
+  EF.hudScale = function () {
+    if (!EF.portrait) return 1;
+    /* CEILING OF 1.35, and it is not taste either. The widest HUD card is
+       244 units; past 1.47x it covers more than half of the 720-unit row and
+       becomes the row's MEDIAN colour, at which point test/framelib.mjs
+       reads the top of the screen as ground and loses the sky entirely. Tried
+       at 1.85 and the gate went from 41/41 to six failures, valley reporting
+       0% sky - the chrome had literally become the skyline. It is also just
+       too much screen to spend on a day counter. 1.35 lifts 13-unit body
+       text from 7.6 to 9.5 real pixels and leaves the card at 46% of the
+       row. Making the chrome properly phone-sized needs a portrait HUD
+       layout, not a bigger copy of the desktop one. */
+    return EF.clamp(EF.px(12) / 12, 1, 1.35);
+  };
+
+  /* The mute control's box. Lives here rather than in game.js because the
+     orchard's WIND gauge has to keep out of it, and two files computing the
+     same corner independently is how they ended up drawn on top of each
+     other. `left` is the leftmost pixel it occupies. */
+  EF.muteBox = function () {
+    var hud = EF.hudRect();
+    /* authored at radius 15; on a phone 15 units is 8 CSS px, so it is sized
+       off EF.px like every other touch target */
+    var s = EF.portrait ? Math.max(1, EF.px(17) / 15) : 1;
+    var x = hud.right - 28 * s;
+    return { x: x, y: hud.y + 24 * s, s: s, left: x - 15 * s };
+  };
+
   EF.portraitFrame = function () {
     var r = EF.fullRect(720, 540);
     var hz = r.y + r.h * EF.SKY_SHARE;

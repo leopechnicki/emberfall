@@ -37,10 +37,24 @@
    * Raking is a drag gesture, so a playfield that ran the entire height of a
    * phone would mean sweeping a leaf a very long way for one point.
    *
-   * The rake head, the pile and the leaves are all scaled up together. A
-   * yard four times the authored area swept with the authored 52-unit rake
-   * is the same round with four times the dragging, which is not the same
-   * round. Scaling the tool with the field keeps the sweep-per-leaf honest. */
+   * The rake head, the pile and the leaves scale up with it - but scaling
+   * the TOOL is not enough on its own, and an earlier version of this comment
+   * claimed it was. Worked through properly:
+   *
+   *   flat yard      640 x 170  =  108,800 u^2, rake radius 52, 150 leaves
+   *   portrait yard  640 x 701  =  448,600 u^2, rake radius 81
+   *
+   * Leaves met per unit of drag goes as density x radius, i.e.
+   * (LEAVES / area) x r. At 150 leaves that is (1/4.12) x 1.55 = 0.375 of
+   * the authored rate: nearly three times as much dragging per leaf, and a
+   * yard that reads as scattered confetti rather than a yard that needs
+   * raking. There is no timer and no fail state so it was still winnable -
+   * just slow, which is the kind of "technically fine" that gets a game put
+   * down.
+   *
+   * So LEAVES scales too, by exactly the factor that puts that rate back:
+   *     LEAVES x (areaP / areaF) x (RAKE_R / rakeR)
+   * TARGET stays 78, so the round is the same length in leaves banked. */
   var _rl = null, _rlKey = '';
 
   function layout() {
@@ -55,7 +69,12 @@
       tall: false, hz: GROUND_Y - 6, gFill: GROUND_Y + 22, fenceY: GROUND_Y,
       yardTop: GROUND_Y + 22, yardBot: 540 - 30,
       clampTop: GROUND_Y + 6, clampBot: 528,
+      /* the authored constants, transcribed - NOT derived from yardTop, which
+         is 22 units lower and silently moved all three on desktop */
+      toastY: GROUND_Y - 34, startY: 430, leafCeil: GROUND_Y + 8, leafFloor: 532,
+      propsOverGround: false,
       pile: { x: PILE_X, y: PILE_Y, r: PILE_R }, rakeR: RAKE_R, leafS: 1,
+      leaves: LEAVES,
       props: [
         { kind: 'tree', x: 128, y: GROUND_Y + 30, s: 0.92, seed: 4141 },
         { kind: 'house', x: 320, y: GROUND_Y + 26, s: 1.0 },
@@ -76,8 +95,12 @@
       tall: true, hz: hz, gFill: hz + 22, fenceY: fenceY,
       yardTop: yardTop, yardBot: yardBot,
       clampTop: yardTop, clampBot: yardBot + 10,
+      toastY: yardTop - 34, startY: yardTop + (yardBot - yardTop) * 0.62,
+      leafCeil: yardTop, leafFloor: yardBot + 22,
+      propsOverGround: true,
       pile: { x: 536, y: yardTop + (yardBot - yardTop) * 0.52, r: PILE_R * 1.55 },
       rakeR: RAKE_R * 1.55, leafS: 1.7,
+      leaves: Math.round(LEAVES * ((yardBot - yardTop) / 170) * (1 / 1.55)),
       /* the yard's own props, standing just behind the fence */
       props: [
         { kind: 'tree', x: 104, y: fenceY + 8, s: 1.45, seed: 4141 },
@@ -105,7 +128,7 @@
 
     var L0 = layout();
     this.leaves = [];
-    for (var i = 0; i < LEAVES; i++) {
+    for (var i = 0; i < L0.leaves; i++) {
       var lx, ly;
       /* Keep the starting scatter out of the pile ring, or the round begins
          with free points and the first sweep feels unearned. */
@@ -126,7 +149,7 @@
     this.wax = 0;
     this.kindling = 0;
 
-    var ry0 = L0.yardTop + (L0.yardBot - L0.yardTop) * 0.62;
+    var ry0 = L0.startY;
     this.rx = 200; this.ry = ry0;       // rake position
     this.px = 200; this.py = ry0;       // previous, for the sweep vector
     this.tx = 200; this.ty = ry0;       // input target
@@ -257,8 +280,11 @@
 
       if (q.x < 10) { q.x = 10; q.vx = Math.abs(q.vx) * 0.3; }
       if (q.x > 710) { q.x = 710; q.vx = -Math.abs(q.vx) * 0.3; }
-      if (q.y < Lu.yardTop) { q.y = Lu.yardTop; q.vy = Math.abs(q.vy) * 0.3; }
-      if (q.y > 532) { q.y = 532; q.vy = -Math.abs(q.vy) * 0.3; }
+      if (q.y < Lu.leafCeil) { q.y = Lu.leafCeil; q.vy = Math.abs(q.vy) * 0.3; }
+      /* was a hard-coded 532. In portrait the yard runs to 570, so every leaf
+         below 532 was snapped up and the bottom strip of the yard could never
+         hold one. */
+      if (q.y > Lu.leafFloor) { q.y = Lu.leafFloor; q.vy = -Math.abs(q.vy) * 0.3; }
 
       if (EF.hypot(q.x - Lu.pile.x, q.y - Lu.pile.y) < Lu.pile.r) {
         q.settle = this.rnd();
@@ -302,17 +328,27 @@
       }
     }
 
+    /* The yard: a house, a fence line, one big maple.
+       Order matters and it is NOT the same in both layouts. Flat draws them
+       BEFORE the ground, which is what the signed-off build did (the slab
+       covers the last few units of trunk and they read as planted). Portrait
+       has to draw them AFTER, because there they stand hundreds of units
+       below the skyline the ground starts at, and drawing them first means
+       the slab paints them out completely. Making this unconditional - which
+       an earlier pass did - silently changed the desktop build. */
+    var pi, pr;
+    function drawProps() {
+      for (pi = 0; pi < L.props.length; pi++) {
+        pr = L.props[pi];
+        if (pr.kind === 'tree') Wd.tree(ctx, pr.x, pr.y, pr.s, pr.seed);
+        else Wd.house(ctx, pr.x, pr.y, pr.s, 0.3);
+      }
+    }
+    if (!L.propsOverGround) drawProps();
+
     Wd.ground(ctx, w, h, L.gFill);
 
-    /* The yard: a house, a fence line, one big maple. Drawn AFTER the ground
-       in portrait because they stand well below the skyline there - before
-       it, the ground slab paints them out entirely. */
-    var pi, pr;
-    for (pi = 0; pi < L.props.length; pi++) {
-      pr = L.props[pi];
-      if (pr.kind === 'tree') Wd.tree(ctx, pr.x, pr.y, pr.s, pr.seed);
-      else Wd.house(ctx, pr.x, pr.y, pr.s, 0.3);
-    }
+    if (L.propsOverGround) drawProps();
 
     /* fence */
     ctx.strokeStyle = P.rgba('bark', 0.8);
@@ -366,7 +402,7 @@
     this._hud(ctx);
 
     if (this.toastT > 0) {
-      EF.text(ctx, this.toast, 360, L.yardTop - 34, 19,
+      EF.text(ctx, this.toast, 360, L.toastY, 19,
         { color: P.rgba('cream', EF.clamp(this.toastT, 0, 1)),
           halo: P.rgba('vignette', 0.5 * EF.clamp(this.toastT, 0, 1)) });
     }
@@ -475,8 +511,11 @@
   };
 
   Rake.prototype._hud = function (ctx) {
-    var hud = EF.hudRect();
-    var x = hud.x + 14, y = hud.y + 12, w = 246, h = 74;
+    var hud = EF.hudRect(), k = EF.hudScale();
+    ctx.save();
+    ctx.translate(hud.x, hud.y);
+    if (k !== 1) ctx.scale(k, k);
+    var x = 14, y = 12, w = 246, h = 74;
     EF.card(ctx, x, y, w, h, 0.9);
     EF.text(ctx, 'THE PILE', x + 12, y + 18, 14,
       { align: 'left', weight: '700', color: P.get('candleGold'), halo: false });
@@ -492,8 +531,12 @@
       { align: 'left', weight: '600', color: P.rgba('cream', 0.85), halo: false });
     EF.text(ctx, this.wax + ' wax  -  ' + this.kindling + ' kindling', x + w - 12, y + 60, 13,
       { align: 'right', weight: '600', color: P.rgba('candleGold', 0.95), halo: false });
+    ctx.restore();
 
-    EF.text(ctx, 'no timer  -  nothing here can be lost', 360, 524, 12,
+    /* Outside the card's transform on purpose: this line belongs to the
+       bottom of the screen, not to the card in the corner. hud.bottom is 540
+       on desktop, so it stays exactly where it was authored. */
+    EF.text(ctx, 'no timer  -  nothing here can be lost', hud.cx, hud.bottom - 16, 12,
       { weight: '600', color: P.rgba('cream', 0.5), halo: false });
   };
 
@@ -530,6 +573,11 @@
 
   Rake.TARGET = TARGET;
   Rake.PILE = { x: PILE_X, y: PILE_Y, r: PILE_R };
+  /* Exposed for the flat-constants gate in test/framing.mjs. Six changes to
+     the signed-off desktop and landscape builds shipped inside a "not a
+     pixel" claim because nothing asserted the flat branch; this is what
+     makes that assertable. */
+  Rake.layout = layout;
   EF.Rake = Rake;
 
 }(window));

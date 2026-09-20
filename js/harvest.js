@@ -38,11 +38,21 @@
    * 128 units/second would turn a 45-second round into a slideshow.
    *
    * So the fall is scaled by distance: `fallK` is exactly the ratio of the
-   * portrait fall to the authored one, applied to every vertical velocity,
-   * which holds AIRTIME - and therefore the reaction window, the wind drift
-   * a fruit picks up on the way down, and the difficulty of the round -
-   * identical to the build that was signed off. The screen gets taller; the
-   * game does not get slower.
+   * portrait fall to the authored one, applied to every vertical velocity
+   * (the spawn velocity AND the end-of-round settle), which holds AIRTIME
+   * exactly - t = (basketY - spawnY) / (vy x fallK) reduces to the flat
+   * time - and with it the reaction window and the sideways drift the wind
+   * gets to apply on the way down. The screen gets taller; the game does not
+   * get slower.
+   *
+   * What is NOT held identical, stated plainly because an earlier version of
+   * this comment claimed difficulty was untouched: `basketS` widens the
+   * catching mouth from +-46 to +-69 in a field that is still 720 wide, so
+   * the orchard IS about 50% more forgiving on a phone. That is deliberate -
+   * at 0.54 CSS px per unit the authored basket is 50 px of glass to aim a
+   * finger at while dragging - but it is a difficulty change, not a neutral
+   * rescale, and the catch test uses the same basketS so what looks like a
+   * catch is a catch.
    *
    *   gFill   where the ground gradient starts (the horizon, in portrait)
    *   floor   where a MISSED fruit lands - near the basket, not at gFill
@@ -63,7 +73,7 @@
   function flatOrchard() {
     return {
       tall: false, hz: 350, gFill: GROUND_Y, floor: GROUND_Y,
-      basketY: BASKET_Y, basketS: 1,
+      basketY: BASKET_Y, basketS: 1, toastY: GROUND_Y - 56,
       spawnY: FLAT_SPAWN_Y, fallK: 1,
       litterY: GROUND_Y + 4, litterH: 540 - GROUND_Y - 4, litterN: 150,
       far: [[70, 0.86, 11], [210, 1.0, 22], [360, 0.92, 33], [510, 1.04, 44], [650, 0.88, 55]],
@@ -79,7 +89,7 @@
 
     return {
       tall: true, hz: hz, gFill: hz, floor: basketY + 46,
-      basketY: basketY, basketS: 1.5,
+      basketY: basketY, basketS: 1.5, toastY: basketY - 92,
       spawnY: spawnY,
       fallK: (basketY - spawnY) / (BASKET_Y - FLAT_SPAWN_Y),
       litterY: hz + 6, litterH: F.bottom - hz - 6, litterN: 150,
@@ -462,7 +472,7 @@
 
     if (this.toastT > 0) {
       var a = EF.clamp(this.toastT, 0, 1);
-      EF.text(ctx, this.toast, w * 0.5, L.basketY - 92, 21,
+      EF.text(ctx, this.toast, w * 0.5, L.toastY, 21,
         { color: P.rgba('cream', a), halo: P.rgba('vignette', 0.5 * a) });
     }
   };
@@ -513,8 +523,11 @@
 
   /* The recipe card - the round's whole brief, always on screen. */
   Harvest.prototype._card = function (ctx) {
-    var hud = EF.hudRect();
-    var x = hud.x + 14, y = hud.y + 12, w = 232, h = 96;
+    var hud = EF.hudRect(), k = EF.hudScale();
+    ctx.save();
+    ctx.translate(hud.x, hud.y);
+    if (k !== 1) ctx.scale(k, k);
+    var x = 14, y = 12, w = 232, h = 96;
     EF.card(ctx, x, y, w, h, 0.9);
     EF.text(ctx, this.recipe.name, x + 12, y + 20, 17,
       { align: 'left', color: P.get('candleGold'), halo: P.rgba('vignette', 0.5) });
@@ -543,13 +556,23 @@
     }
     EF.text(ctx, 'in order  -  x' + this.mult.toFixed(2), x + 12, y + 79, 13,
       { align: 'left', weight: '600', color: P.rgba('cream', 0.85), halo: false });
+    ctx.restore();
   };
 
   Harvest.prototype._windGauge = function (ctx) {
-    /* Inset from the right edge, not flush to it: the mute control lives at
-       (692, 24) in every scene and the gauge was sitting under it. */
-    var hud = EF.hudRect();
-    var x = hud.right - 166, y = hud.y + 12, w = 114, h = 44;
+    /* Inset from the right edge, not flush to it: the mute control shares
+       that corner and the gauge was drawn underneath it. Anchored to the
+       RIGHT edge and scaled about it, then checked against EF.muteBox().left
+       so the two cannot overlap at any scale - which they did in portrait,
+       where the mute grows to 2.09x and ate the gauge's right end. */
+    var hud = EF.hudRect(), k = EF.hudScale();
+    ctx.save();
+    ctx.translate(hud.right, hud.y);
+    if (k !== 1) ctx.scale(k, k);
+    var w = 114, h = 44, y = 12;
+    var x = -166;
+    var clear = (EF.muteBox().left - hud.right) / k - 8;   // in local units
+    if (x + w > clear) x = clear - w;
     EF.card(ctx, x, y, w, h, 0.85);
     EF.text(ctx, 'WIND', x + w * 0.5, y + 13, 11,
       { weight: '700', color: P.rgba('cream', 0.7), halo: false });
@@ -566,18 +589,28 @@
     ctx.moveTo(cx + dir * len * 0.5, cy);
     ctx.lineTo(cx + dir * len * 0.5 - dir * 7, cy + 5);
     ctx.stroke();
+    ctx.restore();
   };
 
   Harvest.prototype._timer = function (ctx) {
-    var hud = EF.hudRect();
-    var w = 260, x = hud.cx - w * 0.5, y = hud.y + 14, h = 9;
+    var hud = EF.hudRect(), k = EF.hudScale();
+    ctx.save();
+    ctx.translate(hud.cx, hud.y);
+    if (k !== 1) ctx.scale(k, k);
+    /* Desktop keeps the authored y=14: at scale 1 the recipe card is 232
+       wide on the left, the gauge is inset on the right and a 260-wide bar
+       across the middle clears both. In portrait every card is 1.35x and the
+       three no longer fit on one row - the bar was drawn straight across the
+       top of the recipe card - so the timer drops underneath it. */
+    var w = 260, x = -w * 0.5, y = EF.portrait ? 116 : 14, h = 9;
     EF.roundRect(ctx, x, y, w, h, 4.5);
     ctx.fillStyle = P.rgba('panel', 0.45); ctx.fill();
     var u = this.left / ROUND;
     EF.roundRect(ctx, x, y, Math.max(3, w * u), h, 4.5);
     ctx.fillStyle = P.rgba(u < 0.2 ? 'leafRusset' : 'candleGold', 0.9); ctx.fill();
-    EF.text(ctx, Math.ceil(this.left) + 's', hud.cx, y + 28, 14,
+    EF.text(ctx, Math.ceil(this.left) + 's', 0, y + 28, 14,
       { weight: '700', color: P.rgba('cream', 0.85) });
+    ctx.restore();
   };
 
   Harvest.prototype.snapshot = function () {
@@ -590,6 +623,11 @@
   };
 
   Harvest.ROUND = ROUND;
+  /* Exposed for the flat-constants gate in test/framing.mjs. Six changes to
+     the signed-off desktop and landscape builds shipped inside a "not a
+     pixel" claim because nothing asserted the flat branch; this is what
+     makes that assertable. */
+  Harvest.layout = layout;
   EF.Harvest = Harvest;
 
 }(window));

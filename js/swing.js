@@ -95,22 +95,32 @@
    *        ahead of her is view-lead, and a hook can be thrown REACH=230.
    *        If view-lead drops below REACH the game starts offering grabs at
    *        vines that are off the right-hand edge - the player is asked to
-   *        aim at something they cannot see. With lead = 0.32*view that
-   *        pins view >= 230/0.68 = 338, so S <= 720/338 = 2.13. 1.75 leaves
-   *        real margin: 411 units of view, 279 of them ahead of her.
-   *   GY   screen y the ground line lands on: low enough that the keeper
-   *        standing on the grass is clear of the thumb pad.
+   *        aim at something they cannot see. With lead = 0.28*view that
+   *        pins view >= 230/0.72 = 320, so S <= 720/320 = 2.25. At S=2.0 the
+   *        view is 360 with 259 of it ahead of her: 29 units of margin on
+   *        REACH, and 100 behind her (see TREE_S note on the backward case).
+   *   GY   screen y the ground line lands on. DERIVED from EF.padTopY, not
+   *        hard-coded: a fixed 600 happened to clear the pad by 3 units at
+   *        390x844 and put the keeper's feet UNDER the pad at 414x896, which
+   *        the gate would never have seen because it only runs one size.
    *
-   * A zoom that respects that ceiling cannot fill a 1558-unit-tall canvas on
-   * its own - the grove is only ~324 units from canopy to grass, so filling
-   * the phone by zoom alone would need S=4.8 and a 150-unit window. The band
-   * between the skyline and the grove is filled with PARALLAX TREE BANDS
-   * instead, which is what makes the depth read. Without them the gate still
-   * passes - bare ground counts as scene, it is not sky - and the screen
-   * still has a quarter of itself doing nothing, which is the whole
-   * complaint in yet another shape. */
-  var ZOOM = 1.75;
-  var GROUND_SCREEN_Y = 600;
+   * A zoom that respects the REACH ceiling cannot fill a 1558-unit-tall
+   * canvas on its own: the grove is only ~324 units from canopy to grass, so
+   * filling the phone by zoom alone would need S=4.8 and a 150-unit window.
+   *
+   * TREE_S is what fills it, and it is the honest version of the fix. The
+   * grove's trees are PURE SCENERY - `tr.scale` is cosmetic, the anchors are
+   * a separate list and the physics never reads it - so in portrait they are
+   * drawn taller. The band above the vines then fills with the actual grove
+   * the player is swinging through, at the right parallax, instead of with
+   * wallpaper. The first attempt filled it with three scrolling background
+   * bands and left the playable layer a strip along the bottom; the review
+   * called that what it was, and it was right - the gate passes on bare
+   * ground either way, because it measures where the horizon is and not
+   * whether anything is happening. */
+  var ZOOM = 2.0;
+  var TREE_S = 1.22;
+  var PAD_MARGIN = 14;
   var _sl = null, _slKey = '';
 
   function layout() {
@@ -122,7 +132,7 @@
 
   function flatGrove() {
     return {
-      tall: false, S: 1, GY: 0, hillY: 336,
+      tall: false, S: 1, GY: 0, treeS: 1, hillY: 336,
       gFill: GROUND_Y, bottom: VIEW_H, far: null,
       lead: 250, camMax: WORLD_W - VIEW_W
     };
@@ -132,8 +142,11 @@
     var F = EF.portraitFrame();
     var r = EF.fullRect(VIEW_W, VIEW_H);
     var view = VIEW_W / ZOOM;
+    /* the grass line sits a margin above the pad, wherever the pad is */
+    var gy = (EF.padTopY === null || EF.padTopY === undefined)
+      ? r.bottom - 150 : EF.padTopY - PAD_MARGIN;
     return {
-      tall: true, S: ZOOM, GY: GROUND_SCREEN_Y, hillY: F.hz,
+      tall: true, S: ZOOM, GY: gy, treeS: TREE_S, hillY: F.hz,
       /* the grove floor runs from the skyline, so there is no dead band
          between the hills and the trees */
       gFill: F.hz + 22, bottom: r.bottom,
@@ -152,12 +165,14 @@
          They wrap on `span`, so the grove never runs out however far she
          travels - a distant tree repeating is not something the eye tracks,
          and 3400 units of hand-placed backdrop is not either. */
+      /* One band only, high and far. The near two are gone: the grove's own
+         trees now occupy that space, and stacking wallpaper in front of real
+         trees just hid them. */
       bands: [
-        { par: 0.22, span: 760, n: 5, y: F.hz + 104, s: 0.62, seed: 410 },
-        { par: 0.44, span: 690, n: 4, y: F.hz + 246, s: 0.98, seed: 520 },
-        { par: 0.66, span: 640, n: 4, y: F.hz + 432, s: 1.38, seed: 630 }
+        { par: 0.22, span: 760, n: 5, y: F.hz + 112, s: 0.58, seed: 410 },
+        { par: 0.40, span: 700, n: 4, y: F.hz + 268, s: 0.92, seed: 520 }
       ],
-      lead: view * 0.32, camMax: WORLD_W - view
+      lead: view * 0.28, camMax: WORLD_W - view
     };
   }
 
@@ -245,6 +260,12 @@
       if (a.y > p.y - 18) continue;                 // must be above us
       var d = EF.hypot(a.x - p.x, a.y - p.y);
       if (d > REACH || d < 34) continue;
+      /* and it must be ON SCREEN. REACH is a radius, so a vine up to 230
+         BEHIND her is eligible while only `lead` units behind are visible -
+         in the flat layouts lead is 250 and this never bites, in portrait it
+         is 100 and without this the game offers a grab at something the
+         player cannot see. */
+      if (a.x < p.x - layout().lead) continue;
       /* Prefer anchors ahead: this is a traversal, and a hook that drags you
          backwards is never the one the player meant. */
       var score = d - (a.x > p.x ? 55 : 0);
@@ -458,7 +479,10 @@
     /* the grove */
     for (var i = 0; i < this.trees.length; i++) {
       var tr = this.trees[i];
-      Wd.tree(ctx, tr.x, GROUND_Y + 6, tr.scale, tr.seed);
+      /* L.treeS is 1 in the flat layouts, so this is the authored grove
+         there. It is cosmetic in every layout - the anchors the physics
+         uses are their own list and do not move with it. */
+      Wd.tree(ctx, tr.x, GROUND_Y + 6, tr.scale * L.treeS, tr.seed);
     }
 
     /* vines hanging from each anchor */
@@ -559,8 +583,11 @@
   };
 
   Swing.prototype._hud = function (ctx) {
-    var hud = EF.hudRect();
-    var x = hud.x + 14, y = hud.y + 12, w = 260, h = 66;
+    var hud = EF.hudRect(), k = EF.hudScale();
+    ctx.save();
+    ctx.translate(hud.x, hud.y);
+    if (k !== 1) ctx.scale(k, k);
+    var x = 14, y = 12, w = 260, h = 66;
     EF.card(ctx, x, y, w, h, 0.88);
     EF.text(ctx, 'TO THE HIGH ORCHARD', x + 12, y + 17, 13,
       { align: 'left', weight: '700', color: P.get('candleGold'), halo: false });
@@ -572,6 +599,7 @@
     ctx.fillStyle = P.rgba('candleGold', 0.92); ctx.fill();
     EF.text(ctx, Math.round(u * 100) + '%   -   ' + this.apples + ' apples   -   ' + this.hooks + ' vines',
       bx, y + 54, 13, { align: 'left', weight: '600', color: P.rgba('cream', 0.88), halo: false });
+    ctx.restore();
   };
 
   Swing.prototype.snapshot = function () {
@@ -595,6 +623,11 @@
 
   Swing.GOAL_X = GOAL_X;
   Swing.WORLD_W = WORLD_W;
+  /* Exposed for the flat-constants gate in test/framing.mjs. Six changes to
+     the signed-off desktop and landscape builds shipped inside a "not a
+     pixel" claim because nothing asserted the flat branch; this is what
+     makes that assertable. */
+  Swing.layout = layout;
   EF.Swing = Swing;
 
 }(window));

@@ -1,0 +1,47 @@
+# EMBERFALL - CI.
+#
+# This exists because test/framing.mjs claims a regression "can never silently
+# happen", and until now nothing ran it on a push, so that claim held only as
+# long as somebody remembered. A gate nobody runs is the same failure this
+# whole branch was written to fix, one level up.
+name: CI
+
+on:
+  push:
+    branches: [main, 'crew/**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      # Real Google Chrome, not Chromium: the suites ask for channel 'chrome'
+      # and fall back loudly if it is missing. Installing it here means the
+      # green run means what it says.
+      - name: Install Google Chrome for Playwright
+        run: npx playwright install --with-deps chrome
+
+      - name: verify + mobile + framing
+        run: npm run test:ci
+
+      # The framing gate's overlays are the evidence a human can check: the
+      # detected horizon drawn on the frame it was measured from.
+      - name: Upload framing evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: framing-screenshots
+          path: test/screenshots/framing/
+          if-no-files-found: ignore
+          retention-days: 14
