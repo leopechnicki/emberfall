@@ -326,8 +326,8 @@ const FLAT = {
           clampTop: 324, clampBot: 528, toastY: 284, startY: 430,
           leafCeil: 326, leafFloor: 532, propsOverGround: false,
           rakeR: 52, leafS: 1, far: null },
-  swing: { S: 1, GY: 0, hillY: 336, gFill: 462, bottom: 540, lead: 250,
-           camMax: 2680, far: null }
+  swing: { S: 1, GY: 0, treeS: 1, hillY: 336, gFill: 462, bottom: 540,
+           lead: 250, camMax: 2680, far: null }
 };
 
 async function checkFlat(pg, label) {
@@ -358,6 +358,12 @@ async function checkFlat(pg, label) {
   ];
   check(JSON.stringify(spots) === JSON.stringify(WANT_SPOTS),
     `${label}: the signposts are still at their authored coordinates`, JSON.stringify(spots));
+
+  /* The mute control: correct but unasserted until now. It is the one of the
+     six that does not live in a layout object, so it needs its own line. */
+  const mute = await pg.evaluate(() => window.EF.muteBox());
+  check(mute.s === 1 && Math.abs(mute.x - 692) < 1e-9 && Math.abs(mute.y - 24) < 1e-9,
+    `${label}: the mute control is still at its authored (692, 24) at scale 1`, JSON.stringify(mute));
 }
 
 /* ------------------------------------------- landscape must not move */

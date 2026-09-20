@@ -89,7 +89,14 @@
     var hz = F.hz;
     var fenceY = F.dy(0.30);
     var yardTop = fenceY + 22;
-    var yardBot = 570;
+    /* Derived from the pad, not hard-coded - the same trap the grove's old
+       GROUND_SCREEN_Y=600 fell into. A flat 570 happens to clear the pad on
+       both sizes the gate opens (padTopY ~600 on each), and on a 768x1024
+       portrait tablet - which is EF.portrait too - padTopY is 571.9, so the
+       yard's floor and the leaves resting on it sat UNDER the thumb pad.
+       min() keeps 390x844 at exactly 570, so nothing measured moves. */
+    var yardBot = Math.min(570, ((EF.padTopY === null || EF.padTopY === undefined)
+      ? 570 : EF.padTopY - 32));
 
     return {
       tall: true, hz: hz, gFill: hz + 22, fenceY: fenceY,
